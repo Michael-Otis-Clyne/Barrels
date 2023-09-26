@@ -18,15 +18,29 @@ soil_data <- soil_data %>%
 #RENAME COLUMNS 
 data <- data %>% 
   rename( BARREL = `BARREL #`)
+
+# Change inflorescence NAs to 0's
+data <- data %>%
+  mutate(FLWR_5 = ifelse(is.na(FLWR_5), 0, FLWR_5),
+                FLWR_6 = ifelse(is.na(FLWR_6), 0, FLWR_6),
+                FLWR_7 = ifelse(is.na(FLWR_7), 0, FLWR_7),
+                FLWR_8 = ifelse(is.na(FLWR_8), 0, FLWR_8),
+                FLWR_9 = ifelse(is.na(FLWR_9), 0, FLWR_9))
+
+
+
+
 ##################################
 ####### HOW MANY INVADERS ??? ####
 ##################################
-invaders <- data %>% 
-  group_by(NOTES_2, NOTES_3, NOTES_4, NOTES_5, NOTES_6) %>% 
-  filter(== "INVADER", na.rm = T)
+# invaders <- data %>% 
+#   group_by(NOTES_2, NOTES_3, NOTES_4, NOTES_5, NOTES_6) %>% 
+#   filter(== "INVADER", na.rm = T)
 
 
-
+##########################
+#######  Reproduction ####
+##########################
 ###### Create final column for FLWR that gives final count of inflorescences 
 FLWR <- data %>% 
   select(FLWR_5, FLWR_6, FLWR_7, FLWR_8, FLWR_9) 
@@ -82,20 +96,34 @@ ggplot(num_ind_barrel, aes(x = n)) +
 
 ####### Try w/o making new df #######
 
-ggplot(data, aes(x=SPECIES)) +
+df <- data %>% # Remove all Unknown splants
+  subset(., SPECIES != "U") %>% 
+  subset(., SPECIES !="UG") %>% 
+  subset(., SPECIES != "UD")
+
+### Number of inflorescence per plant
+ggplot(df, aes(x=SPECIES, color = BARREL)) +
+  geom_jitter(aes(y=FLWR_9)) + 
+  scale_colour_gradient(low ="red", high = "blue")
+  
+### number of plants per species total
+ggplot(df, aes(x=SPECIES, fill = SPECIES)) +
   geom_bar()
 
-ggplot(data, aes(x = SPECIES, y = FLWR_9, color = BARREL)) +
-  geom_point()
+#### make AoD comparison to beginning and end
 
-ggplot(data, aes(x=SPECIES)) +
-  geom_bar(aes(y=FLWR_9))
-  
-
-mpg
+AOD_bar <- ggplot(df, aes(AorD_1))+
+  geom_bar()
 
 #######
 TS_9
 
-ggplot(data, aes(x = SPECIES)) +
-  geom_bar()
+ggplot(df, aes(x = DATE_1, y = SPECIES)) +
+  geom_jitter()
+
+####
+# Date of Emergence #
+###
+
+
+
