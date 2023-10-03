@@ -6,7 +6,7 @@ library(tidyverse)
 library(dplyr)
 library(readxl)
 library(ggplot2)
-
+setwd("~/Desktop/Github/Barrels")
 # Load in data
 data <- read_xlsx("Barrel_Data_2023_FINAL.xlsx")
 soil_data <- read_xlsx("Barrel_Data_2023_FINAL.xlsx", sheet = 2)
@@ -21,14 +21,19 @@ data <- data %>%
 
 # Change inflorescence NAs to 0's
 data <- data %>%
-  mutate(FLWR_5 = ifelse(is.na(FLWR_5), 0, FLWR_5),
+  mutate(FLWR_1 = ifelse(is.na(FLWR_1), 0, FLWR_1),
+         FLWR_2 = ifelse(is.na(FLWR_2), 0, FLWR_2),
+         FLWR_3 = ifelse(is.na(FLWR_3), 0, FLWR_3),
+         FLWR_4 = ifelse(is.na(FLWR_4), 0, FLWR_4),
+         FLWR_5 = ifelse(is.na(FLWR_5), 0, FLWR_5),
                 FLWR_6 = ifelse(is.na(FLWR_6), 0, FLWR_6),
                 FLWR_7 = ifelse(is.na(FLWR_7), 0, FLWR_7),
                 FLWR_8 = ifelse(is.na(FLWR_8), 0, FLWR_8),
                 FLWR_9 = ifelse(is.na(FLWR_9), 0, FLWR_9))
 
-
-
+######
+# Seeds per barrel #
+seeds <- tibble(ARTR = 230.6306526, ELEL = 105.168092, BRTE = 130, LAGL = 130.21, .rows = 2)
 
 ##################################
 ####### HOW MANY INVADERS ??? ####
@@ -124,6 +129,42 @@ ggplot(df, aes(x = DATE_1, y = SPECIES)) +
 ####
 # Date of Emergence #
 ###
+
+
+
+#######################
+### Fitness Metrics ###
+#######################
+
+#How many seeds went in to the barrels in year 1 vs how many plants emerged? 
+
+data <- data %>% 
+  mutate(., .by = sum() )
+
+mutate(data, .by = contains("FLWR"), SEED.TOTAL = rowsum(data, na.rm = T))
+
+FLWRS <- data %>%
+  select (starts_with ("FLWR"))
+
+FLWRS$FLWR_2 <- as.numeric(FLWRS$FLWR_2)
+FLWRS$FLWR_7 <- as.numeric(FLWRS$FLWR_7)
+
+
+FLWRS <- FLWRS %>% 
+  mutate_all(FLWRS, as.numeric(.))
+
+
+FLWRS <- mutate(FLWRS, FLWR_TOTAL = rowSums(FLWRS))
+FLWRS <- FLWRS %>% 
+  group_by(FLWRS, ) %>% 
+  mutate(., MAX = )
+
+FLWRS %>% group_by(FLWR_5,FLWR_6,FLWR_7,FLWR_8, FLWR_9) %>% slice(which.max(value))
+
+
+# How many seeds did we get out from each barrel in year 1?
+
+
 
 
 
