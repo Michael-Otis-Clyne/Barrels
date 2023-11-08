@@ -7,11 +7,13 @@ library(dplyr)
 library(readxl)
 library(ggplot2)
 setwd("~/Desktop/Github/Barrels")
+
 # Load in data
 data <- read_xlsx("Barrel_Data_2023_FINAL.xlsx")
 soil_data <- read_xlsx("Barrel_Data_2023_FINAL.xlsx", sheet = 2)
+brte.indv <- read_xlsx("Barrel_Data_2023_FINAL.xlsx", sheet = 3)
 
-# Move the last VWC Column ot match format
+# Move the last VWC Column to match format
 soil_data <- soil_data %>% 
   relocate(DATE...16, .after = VWC...17)
 
@@ -32,8 +34,8 @@ data <- data %>%
                 FLWR_9 = ifelse(is.na(FLWR_9), 0, FLWR_9))
 
 ######
-# Seeds per barrel #
-seeds <- tibble(ARTR = 230.6306526, ELEL = 105.168092, BRTE = 130, LAGL = 130.21, .rows = 2)
+# Initial seeds per barrel #
+init.seed <- tibble(ARTR = 230.6306526, ELEL = 105.168092, BRTE = 130, LAGL = 130.21, .rows = 2)
 
 ##################################
 ####### HOW MANY INVADERS ??? ####
@@ -126,6 +128,24 @@ TS_9
 ggplot(df, aes(x = DATE_1, y = SPECIES)) +
   geom_jitter()
 
+
+### BRTE seeds produced in each barrel####
+# rename columns
+brte.indv <- brte.indv %>% 
+  rename( BARREL = "Barrel ID", 
+          Wt = 'Weight (g)',
+          SEEDS = 'wt to seeds')
+
+
+brte.indv <- brte.indv[complete.cases(brte.indv),]
+
+ggplot(brte.indv, aes(x = BARREL, y = SEEDS))+geom_point()
+
+B.S.PLot <- ggplot(brte.indv, aes(x = BARREL, y = SEEDS))+
+  geom_bar(stat = "identity") 
+
+B.S.PLot
+
 ####
 # Date of Emergence #
 ###
@@ -154,17 +174,28 @@ FLWRS <- FLWRS %>%
   mutate_all(FLWRS, as.numeric(.))
 
 
-FLWRS <- mutate(FLWRS, FLWR_TOTAL = rowSums(FLWRS))
+FLWRS <- mutate(FLWRS, FLWR_TOTAL = rowmax(FLWRS))
 FLWRS <- FLWRS %>% 
   group_by(FLWRS, ) %>% 
   mutate(., MAX = )
 
-FLWRS %>% group_by(FLWR_5,FLWR_6,FLWR_7,FLWR_8, FLWR_9) %>% slice(which.max(value))
+FLWRS %>% group_by(FLWR_5,FLWR_6,FLWR_7,FLWR_8, FLWR_9) %>% slice(which.max(.))
 
 
 # How many seeds did we get out from each barrel in year 1?
+s_e <- 92
+#s_b <- 
+s_l <- 39
 
 
+##########
+### Do a series of If statements for pulling the plant date about birth, death date and flwr output 
+#Birth date, death date , FLWR and date observed
 
+if(data$NOTES_1 == "NEW") 
+
+
+  
+  
 
 
