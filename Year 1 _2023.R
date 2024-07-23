@@ -143,7 +143,7 @@ if(data$SPECIES[i] == "LAGL"){
 
 
 #write.csv(data, file = "CLYNE_DATA_RD2024.csv", row.names = F)
-write.csv(data, file = "barrel_data_all.csv", row.names = F) # create .csv for Research Design class
+#write.csv(data, file = "barrel_data_all.csv", row.names = F) # create .csv for Research Design class
 
 
 # Create column with TOTAL reproductive output per plant (i.e. LAGL = x inflor * 39 seeds/ inflor)
@@ -164,7 +164,7 @@ write.csv(data, file = "barrel_data_all.csv", row.names = F) # create .csv for R
 
 
 # Plot of the number of BRTE seeds per barrel 
-B.S.PLot <- ggplot(brte.indv, aes(x = BARREL, y = SEEDS))+ 
+B.S.PLot <- ggplot(brte.indv, aes(x = `Barrel ID`, y = `wt to seeds`))+ 
   geom_bar(stat = "identity") 
 
 B.S.PLot # need to make this more pretty 
@@ -181,23 +181,23 @@ B.S.PLot # need to make this more pretty
 
 BRTEmean <- data %>% 
   filter(SPECIES == "BRTE") %>% 
-  summarise(., BRTEavg = mean(seeds),
-            BRTEsd = sd(seeds),
-            se = sd(seeds) / sqrt(length(seeds)))
+  summarise(., BRTEavg = mean(SEEDTotal),
+            BRTEsd = sd(SEEDTotal),
+            se = sd(SEEDTotal) / sqrt(length(SEEDTotal)))
 BRTEmean
 
 ELELmean <- data %>% 
   filter(SPECIES == "ELEL") %>% 
-  summarise(., ELELavg = mean(seeds),
-            ELELsd = sd(seeds),
-            se = sd(seeds) / sqrt(length(seeds)))
+  summarise(., ELELavg = mean(SEEDTotal),
+            ELELsd = sd(SEEDTotal),
+            se = sd(SEEDTotal) / sqrt(length(SEEDTotal)))
 ELELmean
 
 LAGLmean <- data %>% 
   filter(SPECIES == "LAGL") %>% 
-  summarise(., LAGLavg = mean(seeds), 
-            LAGLsd = sd(seeds),
-            se = sd(seeds) / sqrt(length(seeds)))
+  summarise(., LAGLavg = mean(SEEDTotal), 
+            LAGLsd = sd(SEEDTotal),
+            se = sd(SEEDTotal) / sqrt(length(SEEDTotal)))
 LAGLmean
 
 Bobdata <- tibble(Species = c("LAGL", "ELEL", "BRTE"),
@@ -220,32 +220,32 @@ forBob
 
 bobdata2 <- data %>% 
   group_by(BARREL) %>% 
-  mutate(., LAGLtotal = sum(seeds), 
+  mutate(., LAGLtotal = sum(SEEDTotal), 
             LAGLpercap.perbarrel = sum(FLWRTotal)/(96*130),
-            LAGLsd = sd(seeds/(130)),
-            se = sd(seeds) / sqrt(length(seeds)))
+            LAGLsd = sd(SEEDTotal/(130)),
+            se = sd(SEEDTotal) / sqrt(length(SEEDTotal)))
   
 BRTEpercap <- data %>% 
   filter(SPECIES == "BRTE") %>% 
-  summarise(., BRTEtotal = sum(seeds), 
-            percap = sum(seeds)/ (96*130),
-            sd = sd(seeds/(130)),
-            se = sd(seeds) / sqrt(length(seeds)))
+  summarise(., BRTEtotal = sum(SEEDTotal), 
+            percap = sum(SEEDTotal)/ (96*130),
+            sd = sd(SEEDTotal/(130)),
+            se = sd(SEEDTotal) / sqrt(length(SEEDTotal)))
 
 ELELpercap <- data %>% 
   filter(SPECIES == "ELEL") %>% 
-  summarise(., LAGLtotal = sum(seeds), 
-            percap = sum(seeds)/ (64*105),
-            sd = sd(seeds/(105)),
-            se = sd(seeds) / sqrt(length(seeds)))
+  summarise(., LAGLtotal = sum(SEEDTotal), 
+            percap = sum(SEEDTotal)/ (64*105),
+            sd = sd(SEEDTotal/(105)),
+            se = sd(SEEDTotal) / sqrt(length(SEEDTotal)))
 
 
 LAGLpercap <- data %>% 
   filter(SPECIES == "LAGL") %>% 
-  summarise(., LAGLtotal = sum(seeds), 
-            percap = sum(seeds)/ (96*130),
-            sd = sd(seeds/(130)),
-            se = sd(seeds) / sqrt(length(seeds)))
+  summarise(., LAGLtotal = sum(SEEDTotal), 
+            percap = sum(SEEDTotal)/ (96*130),
+            sd = sd(SEEDTotal/(130)),
+            se = sd(SEEDTotal) / sqrt(length(SEEDTotal)))
 
 Bobdata.percap <- tibble(Species = c("LAGL", "ELEL", "BRTE"),
                   Average = c(LAGLpercap$percap, ELELpercap$percap, BRTEpercap$percap) ,
@@ -256,22 +256,22 @@ Bobdata.percap <- tibble(Species = c("LAGL", "ELEL", "BRTE"),
 forBob.percap <- ggplot(data = Bobdata.percap) +
   geom_bar(aes(x = Species, y = Average), stat = "identity", fill = "darkgreen") + 
   geom_errorbar(aes(x = Species, ymin = Average-sd, ymax = Average+sd), 
-                width=0.4, colour="black", alpha=1, size=1)+
+                width=0.4, colour="black", alpha=1, linewidth=1)+
   theme_light() +
   ylab("Seeds") + 
   ggtitle("Seed Production Per Capita")
 
 forBob.percap
 
-ggplot(fecLAGL, aes(x = BARREL, y = SEEDTotal))+
-  geom_bar(stat = "identity") 
-
-ggplot( fecELEL, aes(x = BARREL, y = SEEDTotal))+
-  geom_bar(stat = "identity") 
-
-# Plot of the number of BRTE seeds per barrel 
-B.S.PLot <- ggplot(brte.indv, aes(x = BARREL, y = SEEDS))+ 
-  geom_bar(stat = "identity") 
+# ggplot(fecLAGL, aes(x = BARREL, y = SEEDTotal))+
+#   geom_bar(stat = "identity") 
+# 
+# ggplot( fecELEL, aes(x = BARREL, y = SEEDTotal))+
+#   geom_bar(stat = "identity") 
+# 
+# # Plot of the number of BRTE seeds per barrel 
+# B.S.PLot <- ggplot(brte.indv, aes(x = BARREL, y = SEEDS))+ 
+#   geom_bar(stat = "identity") 
 
 
 
@@ -281,6 +281,44 @@ B.S.PLot <- ggplot(brte.indv, aes(x = BARREL, y = SEEDS))+
 #######################
 
 #How many seeds went in to the barrels in year 1 vs how many plants emerged? 
+
+# Initial seeds per barrel #
+#init.seed <- tibble(ARTR = 231, ELEL = 105, BRTE = 130, LAGL = 130)
+init.seed <- tibble(ARTRtotal = 231*64, ELELtotal = 105*64, BRTEtotal = 130*96, LAGLtotal = 130*96)
+
+
+init.seed <- init.seed %>% mutate(., ARTRgerm = 0, 
+                                  ELELgerm = dim(filter(data, SPECIES == "ELEL") %>% # how many ELEL survived to the last survey?
+                                                   filter(., AorD_9 == "A"))[1],
+                                  BRTEgerm = dim(filter(data, SPECIES == "BRTE") %>% # how many BRTE reproduced at least 1 inflorescence?
+                                                   filter(., FLWRTotal > 0))[1],
+                                  LAGLgerm = dim(filter(data, SPECIES == "LAGL") %>% # how many LAGL reproduced at least 1 inflorescence?
+                                                   filter(., FLWRTotal > 0))[1])
+germ.plot <- tribble(
+  ~SPECIES, ~INIT.tot, ~GERM.tot, ~prop.germ,
+  #--|--|----
+  "ARTR", init.seed$ARTRtotal, init.seed$ARTRgerm, (init.seed$ARTRgerm/init.seed$ARTRtotal),
+  "ELEL", init.seed$ELELtotal, init.seed$ELELgerm, (init.seed$ELELgerm/init.seed$ELELtotal),
+  "BRTE",init.seed$BRTEtotal, init.seed$BRTEgerm, (init.seed$BRTEgerm/init.seed$BRTEtotal),
+  "LAGL", init.seed$LAGLtotal, init.seed$LAGLgerm, (init.seed$LAGLgerm/init.seed$LAGLtotal)
+)
+
+ggplot(data = germ.plot) + 
+  geom_bar(aes(x = SPECIES, y = prop.germ), stat = "identity", fill = "pink2")+
+  theme_light() +
+  ylab("Germination Proportion") + 
+  ggtitle("Germination Per Capita")
+
+
+
+
+
+
+
+
+
+
+
 
 
 ##########
