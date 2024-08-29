@@ -200,18 +200,33 @@ LAGLmean <- data %>%
             se = sd(SEEDTotal) / sqrt(length(SEEDTotal)))
 LAGLmean
 
-Bobdata <- tibble(Species = c("LAGL", "ELEL", "BRTE"),
+Bobdata <- tibble(Species = c("Native-Fast", "Native-Medium", "Invasive-Fast"),
                   Average = c(LAGLmean$LAGLavg, ELELmean$ELELavg, BRTEmean$BRTEavg) ,
                sd = c(LAGLmean$LAGLsd, ELELmean$ELELsd, BRTEmean$BRTEsd),
                se = c(LAGLmean$se, ELELmean$se, BRTEmean$se))
 
 ##### first plot is Mean output of each species maybe both in absolute numbers of seeds
+
+
+# set explicit colors for each species-LH
+#group.colors <- c("N-F" = "#00AF99", "N-M" = "#000FAF", "I-F" ="#F0affa")
+# group.colors <- c("Native-Fast" = "#00AF99",
+#                   "Native-Medium" = "#000FAF",
+#                   "Invasive-Fast" ="#F00029")
+
+
+# library(wesanderson)
+# names(wes_palettes)
+library(RColorBrewer)
+display.brewer.all(colorblindFriendly = F)
+
 forBob <- ggplot(data = Bobdata) +
-  geom_bar(aes(x = Species, y = Average), stat = "identity", fill = "darkgreen") + 
+  geom_bar(aes(x = Species, y = Average, fill = Species), stat = "identity") + 
   geom_errorbar(aes(x = Species, ymin = Average-sd, ymax = Average+sd), 
-                width=0.4, colour="black", alpha=1, linewidth=1) + theme_light() +
+                width=0.4, colour="black", alpha=1, linewidth= 0.5) + theme_light() +
   ylab("Seeds") +
-  ggtitle("Mean Seed Production")
+  ggtitle("Mean Seed Production")+coord_flip()+
+  scale_fill_brewer(palette = "Dark2")
 
 forBob
 ########
@@ -247,21 +262,22 @@ LAGLpercap <- data %>%
             sd = sd(SEEDTotal/(130)),
             se = sd(SEEDTotal) / sqrt(length(SEEDTotal)))
 
-Bobdata.percap <- tibble(Species = c("LAGL", "ELEL", "BRTE"),
-                  Average = c(LAGLpercap$percap, ELELpercap$percap, BRTEpercap$percap) ,
+Bobdata.percap <- tibble(Species = c("Native-Fast", "Native-Medium", "Invasive-Fast"),
+                  Average = c(LAGLpercap$percap, ELELpercap$percap, BRTEpercap$percap),
                   sd = c(LAGLpercap$sd, ELELpercap$sd, BRTEpercap$sd))
 
 
 
 forBob.percap <- ggplot(data = Bobdata.percap) +
-  geom_bar(aes(x = Species, y = Average), stat = "identity", fill = "darkgreen") + 
+  geom_bar(aes(x = Species, y = Average, fill = Species), stat = "identity") + 
   geom_errorbar(aes(x = Species, ymin = Average-sd, ymax = Average+sd), 
-                width=0.4, colour="black", alpha=1, linewidth=1)+
+                width=0.4, colour="black", alpha=1, linewidth= 0.5)+
+  coord_flip()+
   theme_light() +
   ylab("Seeds") + 
-  ggtitle("Seed Production Per Capita")
+  ggtitle("Seed Production Per Capita") +scale_fill_brewer(palette = "Dark2")
 
-forBob.percap
+
 
 # ggplot(fecLAGL, aes(x = BARREL, y = SEEDTotal))+
 #   geom_bar(stat = "identity") 
@@ -274,7 +290,11 @@ forBob.percap
 #   geom_bar(stat = "identity") 
 
 
+seed.fig <- ggarrange(forBob, forBob.percap,
+                      ncol = 1, nrow = 2, common.legend = T,
+                      labels = c("(A)", "(B)"))
 
+seed.fig
 
 #######################
 ### Fitness Metrics ###

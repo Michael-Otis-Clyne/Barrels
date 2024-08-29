@@ -144,6 +144,24 @@ LH_boxes <- ggplot(data_long, aes(LH_combo, value, fill = LH_combo)) +
   xlab('') +
   ylab('')
 LH_boxes
+
+#######
+# Just Seed total by treatment ###
+###
+datalong.plot <- data_long %>% 
+  filter(., variable == "SEEDTotal") %>% 
+  mutate(., sd= sd(value))
+
+
+data_long %>% 
+  filter(., variable == "SEEDTotal")
+ggplot(datalong.plot)+
+  geom_bar(aes(x = LH_combo, y =value , fill= LH_combo), stat = "identity")+
+  geom_errorbar(aes(x = LH_combo, ymin = (value - sd), ymax = (value +sd)))
+
+
+
+
 #pretty much everything appears equivalent across combinations except survival;
 # all survival in fast-medium combos (and we know from above it's all ELEL)
 

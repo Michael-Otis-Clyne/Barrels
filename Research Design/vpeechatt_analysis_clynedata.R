@@ -41,7 +41,7 @@ pkgTest("lavaanPlot")
 ##### Loading + Visualizing Data #####
 
 clyne.data = data.table::fread(
-    "oclyne_data.csv",
+  "barrel_data_all.csv",
 )
 head(clyne.data)
 
