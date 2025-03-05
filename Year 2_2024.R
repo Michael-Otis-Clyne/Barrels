@@ -17,8 +17,8 @@ setwd("/Users/michaelotisclyne/Desktop/Github/Barrels")
 
 # Load in data
 #countdata <- read_xlsx("2024 Data.xlsx", sheet = 1)
-plantdata <- read_xlsx("2024 Data.xlsx", sheet = 3)
-VWCdata <- read_xlsx("2024 Data.xlsx", sheet = 4)
+plantdata <- read_xlsx("2024 Data.xlsx", sheet = 4)
+VWCdata <- read_xlsx("2024 Data.xlsx", sheet = 5)
 
 
 # countdata <- countdata %>% 
@@ -64,11 +64,11 @@ speciescounts <- plantdata %>%
 # make a figure of number of plants survived to last survey in each year 1 and year 2
 data23 <- read.csv("barrel_data_all.csv")
 
-data24 <- read_xlsx("2024 Data.xlsx", sheet = 3)
-count24 <- read_xlsx("2024 Data.xlsx", sheet = 1)
+data24 <- read_xlsx("2024 Data_Clean.xlsx", sheet = 2)
+count24 <- read_xlsx("2024 Data_Clean.xlsx", sheet = 1)
+count24 <- count24[-161,] # get rid of "total" row
 data24 <- data24 %>% rename(., BARREL = `BARREL #`, PLANT.ID = `PLANT ID`) 
 
-data24 <- data24[-380,] # remove the ELEL onvader in barel 44
 
 
 count.df <- tribble(
@@ -252,32 +252,32 @@ data23<- data23 %>%
 #######
  
 
-#get ELEL sums from each Barrel in data24
-elel.b.sum <- data24 %>% 
-  filter(SPECIES == "ELEL") %>%   # select just ELEL
-  select(., BARREL, SPECIES, Trt) %>% 
-  mutate(., Count = 1)
-
-elel.agg <- aggregate(Count~BARREL, elel.b.sum, FUN = sum) # sum all ELEL in each barrel
-
-write_csv(elel.agg, file="ELEL_SUM.csv")
-
-
+# #get ELEL sums from each Barrel in data24
+# elel.b.sum <- data24 %>% 
+#   filter(SPECIES == "ELEL") %>%   # select just ELEL
+#   select(., BARREL, SPECIES, Trt) %>% 
+#   mutate(., Count = 1)
+# 
+# elel.agg <- aggregate(Count~BARREL, elel.b.sum, FUN = sum) # sum all ELEL in each barrel
+# 
+# write_csv(elel.agg, file="ELEL_SUM.csv")
 
 
 
+
+elel.agg <- read.csv("ELEL_SUM.csv")
 #set-up data for plot
 count24$Trt <- gsub(".*_", "", count24$Trt)
 count24 <- count24 %>% mutate(., Trt = as.factor(Trt))
 
-diff.plot <- count24 %>% 
-  mutate(., Trt = ifelse(Trt == "1", "Control", "Repeated")) %>% 
+diff.plot <- count24 %>%
+  mutate(., Trt = ifelse(Trt == "1", "Control", "Repeated")) %>%
   mutate(., BARREL = `Barrel ID`,
-         "I-F" = as.numeric(`BRTE count`), 
+         "I-F" = as.numeric(`BRTE count`),
          "N-F" = as.numeric(`LAGL count`),
          "N-M" = as.numeric(`ELEL count`),
-         "N-S" = as.numeric(`ARTR count`)) %>% 
-  select(., BARREL, Trt, "I-F", "N-F", "N-M", "N-S") 
+         "N-S" = as.numeric(`ARTR count`)) %>%
+  select(., BARREL, Trt, "I-F", "N-F", "N-M", "N-S")
 
 diff.plot <- diff.plot[!grepl("TOTAL", diff.plot$BARREL),]
 
@@ -285,13 +285,12 @@ diff.plot <- diff.plot[!grepl("TOTAL", diff.plot$BARREL),]
 write_csv(diff.plot, file="diff.csv")
 
 diffplot <- read_csv("diff.csv")
-
+# 
 # head(elel.agg)
 # head(TESTY)
-# test.merge <- TESTY %>% 
+# test.merge <- TESTY %>%
 #   mutate(., `N-M`= ifelse(BARREL==elel.agg$BARREL, elel.agg$Count, 0))
-# 
-# match(elel.agg$BARREL, TESTY$BARREL)
+
 
 diffplot <- melt(diffplot, id.vars = c("BARREL", "Trt")) 
   
@@ -317,24 +316,10 @@ alldiffplot <- ggplot(data = diffplot)+
   
 alldiffplot
 
-names(wes_palettes)
-
-IFplot <- diffplot %>% 
-  filter(., variable == "Invasive-Fast") %>% 
-  ggplot(data = .)+
-  geom_boxplot(aes(x = Treatment, y = value, fill = Treatment), outliers = T)+
-  ggtitle("") +
-  xlab("Invasive-Fast") + ylab("") +
-  theme_minimal()+
-  scale_fill_manual(values = wes_palette("GrandBudapest1", n = 2)) +coord_flip()
-#+ theme(plot.title = element_text(hjust=0.5))
-  
-
-IFplot # plot for just cheatgrass
 
 
 Nativeplot <- diffplot %>%  # plot for all natives
-  filter(., variable %in% c("N-F", "N-M", "N-S")) %>% 
+  filter(., variable %in% c("Native-Fast", "Native-Medium", "Native-Slow")) %>% 
   ggplot(data = .)+
   geom_boxplot(aes(x = Treatment, y = value, fill = variable), outliers = T)+
   ggtitle("Plant Counts by Species and Treatment") +
@@ -342,48 +327,51 @@ Nativeplot <- diffplot %>%  # plot for all natives
   labs(fill = "Species")+
   scale_fill_brewer()
 
-Nativeplot
+IFplot <- diffplot %>% 
+  filter(., variable == "Invasive-Fast") %>% 
+  ggplot(data = .)+
+  geom_boxplot(aes(x = Treatment, y = value, fill = Treatment), outliers = T)+
+  ggtitle("") +
+  xlab(expression(bold("(A)")~" Invasive-Fast")) + ylab("") +  # <- Modified here
+  theme_minimal()+
+  scale_fill_manual(values = wes_palette("GrandBudapest1", n = 2)) +
+  coord_flip()
 
 NFplot <- diffplot %>% 
   filter(., variable == "Native-Fast") %>% 
   ggplot(data = .)+
   geom_boxplot(aes(x = Treatment, y = value, fill = Treatment), outliers = T)+  
   ggtitle("") +
-  xlab("Native-Fast") + ylab("") +  
+  xlab(expression(bold("(B)")~" Native-Fast")) + ylab("") +  # <- Modified here
   theme_minimal()+
-  scale_fill_manual(values = wes_palette("GrandBudapest1", n = 2)) +coord_flip()
-
-NFplot
-
+  scale_fill_manual(values = wes_palette("GrandBudapest1", n = 2)) +
+  coord_flip()
 
 NMplot <- diffplot %>% 
   filter(., variable == "Native-Medium") %>% 
   ggplot(data = .)+
   geom_boxplot(aes(x = Treatment, y = value, fill = Treatment), outliers = T)+  
   ggtitle("") +
-  xlab("Native-Medium") + ylab("") +  
+  xlab(expression(bold("(C)")~" Native-Medium")) + ylab("") +  # <- Modified here
   theme_minimal()+
-  scale_fill_manual(values = wes_palette("GrandBudapest1", n = 2)) +coord_flip()
-
-NMplot
-
+  scale_fill_manual(values = wes_palette("GrandBudapest1", n = 2)) +
+  coord_flip()
 
 Nsplot <- diffplot %>% 
   filter(., variable == "Native-Slow") %>% 
   ggplot(data = .)+
   geom_boxplot(aes(x = Treatment, y = value, fill = Treatment), outliers = T)+  
   ggtitle("") +
-  xlab("Native-Slow") + ylab("") +  
+  xlab(expression(bold("(D)")~" Native-Slow")) + ylab("") +  # <- Modified here
   theme_minimal()+
-  scale_fill_manual(values = wes_palette("GrandBudapest1", n = 2))+coord_flip()
-
-Nsplot
+  scale_fill_manual(values = wes_palette("GrandBudapest1", n = 2)) +
+  coord_flip()
 
 
 
 figure <- ggarrange(IFplot, NFplot, NMplot, Nsplot, 
           common.legend = T, legend = "top",
-          labels = c("(A)", "(B)", "(C)", "(D)"),
+          #labels = c("(A)", "(B)", "(C)", "(D)"),
           ncol = 2, nrow = 2)
 
 annotate_figure(figure,
@@ -394,3 +382,131 @@ annotate_figure(figure,
 
 
 ###
+
+#################################################
+### Does LAGL actually compete well with BRTE ###
+#################################################
+# To do this 
+count24 <- count24 %>% 
+  rename(BRTE = `BRTE count`,
+         ELEL = `ELEL count`,
+         ARTR = `ARTR count`,
+         LAGL = `LAGL count`)
+
+count24$Sp.combo <- barrelkey$Species
+
+df_long <- count24 %>%
+  select(., `Barrel ID`, BRTE, LAGL, ELEL, ARTR, Trt) %>% 
+  filter(., BRTE >0) %>% 
+  pivot_longer(cols = c(LAGL, ARTR , ELEL), 
+               names_to = "Species", 
+               values_to = "Count") %>% 
+  filter(., Count > 0) %>% 
+  mutate(Species = as.factor(Species), 
+         Count = as.factor(Count))
+
+
+
+# Create a boxplot to visualize BRTE competition
+ggplot(df_long, aes(x = Species, y = BRTE, fill = Species)) +
+  geom_boxplot(outliers = F) +
+  theme_minimal() +
+  labs(#title = "Effect of Competitor Species on BRTE Count",
+       fill = "Species",
+       x = "Species",
+       y = "BRTE")
+
+####3
+# Split the species up by treatment
+count_long <- count24 %>%
+  rename(., Barrel = `Barrel ID`) %>% 
+  select(., Barrel, BRTE, LAGL, ELEL, ARTR, Trt) %>% 
+  pivot_longer(cols = c(LAGL, ARTR , ELEL), 
+               names_to = "Species", 
+               values_to = "Count") %>% 
+  mutate(Species = as.factor(Species), 
+         Count = as.numeric(Count)) %>% 
+  drop_na(., Trt)
+
+count_test <- count_long %>% 
+  select(.,Barrel, BRTE, Trt, Species, Count) %>% 
+  filter(., Count > 0)
+
+
+ggplot(count_test, aes(x = Trt, y = BRTE, fill = Species)) +
+  geom_boxplot(outliers = F) +
+  theme_minimal() +
+  labs(#title = "Effect of Competitor Species on BRTE Count",
+    fill = "Species",
+    x = "Species",
+    y = "BRTE")
+
+
+
+library(ggplot2)
+library(tidyr)
+
+# Convert data from wide to long format for better faceting
+# count24_long <- count24 %>%
+#   pivot_longer(cols = c(LAGL, ELEL, ARTR), names_to = "Species", values_to = "Other_Species_Count")%>% 
+#   drop_na(., Trt)
+
+count_plot <- count24 %>% 
+  filter(., Sp.combo %in% c("BA", "BE", "BL")) %>% 
+  rename(., Treatment = Trt) %>% 
+  mutate(Treatment = recode(Treatment, "A" = "All", "1" = "Once"))
+  
+
+ggplot(count_plot, aes(x = Sp.combo, y = BRTE, fill = Treatment)) +
+  geom_boxplot(outliers = F) +
+  scale_x_discrete(labels = c("BA" = "ARTR",
+                              "BE" = "ELEL",
+                              "BL" = "LAGL")) + 
+  facet_wrap(~Treatment) +  # Facet by species to separate comparisons
+  labs(title = "BRTE Count as a Function of Other Species and Treatment",
+       x = "Species",
+       y = "Individual BRTE Total Per Barrel") +
+  theme_minimal() +
+  theme(legend.position = "top")+
+  scale_fill_manual(values = wes_palette("GrandBudapest1", n = 2))
+
+
+anova <- aov(BRTE ~ Sp.combo, data = count_plot)
+summary(anova)
+means <- count24 %>%
+  group_by(Sp.combo) %>%
+  summarise(mean_BRTE = mean(BRTE, na.rm = TRUE))
+
+
+library(multcompView)
+library(agricolae)
+
+tukey_result <- HSD.test(anova, "Sp.combo", group = TRUE) 
+letters_df <- tukey_result$groups
+letters_df$Sp.combo <- rownames(letters_df)  # Convert row names to column
+
+ggplot(count_plot, aes(x = Sp.combo, y = BRTE, fill = Treatment)) +
+  geom_boxplot(outliers = F) +
+  geom_text(data = letters_df, aes(x = Sp.combo, y = max(count_plot$BRTE)),
+            color = "black", size = 5, fontface = "bold") +  # Remove `fill = Treatment`
+  labs(title = "BRTE Count by Species Combination",
+       x = "Species Combination",
+       y = "BRTE Count",
+       fill = "Treatment") +
+  theme_minimal() +
+  theme(legend.position = "top")
+
+library(multcomp)
+count_plot <- count_plot %>% 
+  mutate(., Sp.combo = as.factor(Sp.combo))
+amod <- aov(BRTE ~ Sp.combo, data = count_plot)
+### specify all pair-wise comparisons among levels of variable "tension"
+tuk <- glht(amod, linfct = mcp(Sp.combo = "Tukey"))
+### extract information
+tuk.cld <- cld(tuk)
+### use sufficiently large upper margin
+old.par <- par(mai=c(1,1,1.25,1), no.readonly = TRUE)
+### plot
+plot(tuk.cld)
+par(old.par)
+
