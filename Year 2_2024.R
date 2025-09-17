@@ -9,6 +9,9 @@ library(ggplot2)
 library(reshape2)
 library(viridis)
 
+library(conflicted)
+conflict_prefer("select", "dplyr")
+
 # Set WD for Desktop
 # setwd("~/GitHub/Barrels")
 # Set WD for laptop
@@ -43,7 +46,7 @@ speciescounts <- plantdata %>%
          ARTR = (SPECIES=="ARTR"),
          BRTE = (SPECIES=="BRTE"),
          LAGL = (SPECIES=="LAGL")) %>% 
-  select(., `BARREL #`, QUAD, HT_1, HT_2, FLWR_1, ELEL, BRTE, ARTR, LAGL, FLWR_2, SPECIES) %>% 
+  dplyr::select(., `BARREL #`, QUAD, HT_1, HT_2, FLWR_1, ELEL, BRTE, ARTR, LAGL, FLWR_2, SPECIES) %>% 
   filter(., SPECIES == "ELEL")
 
 
@@ -273,8 +276,8 @@ count24 <- count24 %>% mutate(., Trt = as.factor(Trt))
 diff.plot <- count24 %>%
   mutate(., Trt = ifelse(Trt == "1", "Control", "Repeated")) %>%
   mutate(., BARREL = `Barrel ID`,
-         "I-F" = as.numeric(`BRTE count`),
-         "N-F" = as.numeric(`LAGL count`),
+         "I-F" = as.numeric(BRTE),
+         "N-F" = as.numeric(LAGL),
          "N-M" = as.numeric(`ELEL count`),
          "N-S" = as.numeric(`ARTR count`)) %>%
   select(., BARREL, Trt, "I-F", "N-F", "N-M", "N-S")
@@ -454,25 +457,64 @@ library(tidyr)
 count_plot <- count24 %>% 
   filter(., Sp.combo %in% c("BA", "BE", "BL")) %>% 
   rename(., Treatment = Trt) %>% 
-  mutate(Treatment = recode(Treatment, "A" = "All", "1" = "Once"))
+  mutate(Treatment = recode(Treatment, "A" = "Repeated", "1" = "Control")) %>% 
+  dplyr::select(., BRTE, LAGL, ELEL, ARTR, Treatment, Sp.combo)
   
+count_plot$letter <- "a"
 
 ggplot(count_plot, aes(x = Sp.combo, y = BRTE, fill = Treatment)) +
-  geom_boxplot(outliers = F) +
+  geom_boxplot(outliers = T) +
   scale_x_discrete(labels = c("BA" = "ARTR",
                               "BE" = "ELEL",
                               "BL" = "LAGL")) + 
   facet_wrap(~Treatment) +  # Facet by species to separate comparisons
-  labs(title = "BRTE Count as a Function of Other Species and Treatment",
-       x = "Species",
-       y = "Individual BRTE Total Per Barrel") +
+  labs(title = "BRTE Count by Competing Species and Seeding Treatment",
+       x = "Competing Species",
+       y = "BRTE Count Per Barrel") +
   theme_minimal() +
   theme(legend.position = "top")+
-  scale_fill_manual(values = wes_palette("GrandBudapest1", n = 2))
+  scale_fill_manual(values = wes_palette("GrandBudapest1", n = 2))#+
+  #geom_text(data = count_plot, aes(x = Sp.combo, y = 900), label = count_plot$letter)
+
+###################
+#Overlay the raw data on the plot 
+ggplot(count_plot, aes(x = Sp.combo, y = BRTE, fill = Treatment)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +  # Remove boxplot outliers so we don't double-show them
+  geom_jitter(aes(color = Treatment), 
+              width = 0.2, 
+              shape = 21, 
+              size = 2, 
+              alpha = 0.6,
+              show.legend = FALSE) +
+  scale_x_discrete(labels = c("BA" = "ARTR",
+                              "BE" = "ELEL",
+                              "BL" = "LAGL")) + 
+  facet_wrap(~Treatment) +
+  labs(title = "BRTE Count by Competing Species and Seeding Treatment",
+       x = "Competing Species",
+       y = "BRTE Count Per Barrel") +
+  theme_minimal() +
+  theme(legend.position = "top") +
+  scale_fill_manual(values = wes_palette("GrandBudapest1", n = 2)) +
+  scale_color_manual(values = wes_palette("GrandBudapest1", n = 2))  # match colors for points
 
 
-anova <- aov(BRTE ~ Sp.combo, data = count_plot)
+
+
+
+
+anova <- aov(BRTE ~ Sp.combo+Treatment, data = count_plot)
 summary(anova)
+tukey1 <- HSD.test(anova, c("Sp.combo", "Treatment"), group = TRUE) 
+tukey1
+
+anova_interaction <- aov(BRTE ~ Sp.combo * Treatment, data = count_plot)
+summary(anova_interaction)
+
+tukey2_int <- HSD.test(anova, c("Sp.combo", "Treatment"), group = TRUE) 
+
+
+
 means <- count24 %>%
   group_by(Sp.combo) %>%
   summarise(mean_BRTE = mean(BRTE, na.rm = TRUE))
@@ -481,25 +523,41 @@ means <- count24 %>%
 library(multcompView)
 library(agricolae)
 
-tukey_result <- HSD.test(anova, "Sp.combo", group = TRUE) 
+# Tukey HSD Test
+anova <- aov(BRTE ~ Sp.combo+Treatment, data = count_plot)
+tukey_result <- HSD.test(anova, c("Sp.combo", "Treatment"), group = TRUE) 
+plot(tukey_result)
 letters_df <- tukey_result$groups
 letters_df$Sp.combo <- rownames(letters_df)  # Convert row names to column
 
-ggplot(count_plot, aes(x = Sp.combo, y = BRTE, fill = Treatment)) +
-  geom_boxplot(outliers = F) +
-  geom_text(data = letters_df, aes(x = Sp.combo, y = max(count_plot$BRTE)),
-            color = "black", size = 5, fontface = "bold") +  # Remove `fill = Treatment`
+# Ensure that both dataframes have the same Sp.combo levels
+max_values <- count24 %>% 
+  group_by(Sp.combo) %>% 
+  summarise(y_position = max(BRTE, na.rm = TRUE) + 10)  # Add space above boxes
+
+# Merge Tukey letters with max BRTE values
+letters_df <- letters_df %>% 
+  left_join(max_values, by = "Sp.combo")  # Ensures proper y placement
+
+# Boxplot with Letters
+ggplot(count24, aes(x = Sp.combo, y = BRTE, fill = Trt)) +
+  geom_boxplot() +
+  geom_text( aes(x = Sp.combo, y = y_position, label = groups),
+            color = "black", size = 5, fontface = "bold") +  
   labs(title = "BRTE Count by Species Combination",
        x = "Species Combination",
        y = "BRTE Count",
-       fill = "Treatment") +
+       fill = "Trt") +
   theme_minimal() +
   theme(legend.position = "top")
 
 library(multcomp)
+
+
+
 count_plot <- count_plot %>% 
   mutate(., Sp.combo = as.factor(Sp.combo))
-amod <- aov(BRTE ~ Sp.combo, data = count_plot)
+amod <- aov(BRTE ~ Sp.combo+Treatment, data = count_plot)
 ### specify all pair-wise comparisons among levels of variable "tension"
 tuk <- glht(amod, linfct = mcp(Sp.combo = "Tukey"))
 ### extract information
