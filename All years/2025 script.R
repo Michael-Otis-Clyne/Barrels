@@ -433,108 +433,57 @@ treatment_plot <- ggplot(count_new_trt, aes(x = Treatment, y = Count, fill = Tre
 
 treatment_plot
 
-
-
-##################
-### Model time ###
-##################
-
-# simple linear model of seeds in to seeds out each year
-
-# start by setting up the seed data
-
-SDdata_23_calc <- Pdata23_clean %>% 
-  select(BARREL, SPECIES, FLWR_FINAL) %>% 
-  mutate(
-    Seed_tot = case_when(
-      SPECIES == "LAGL" ~ FLWR_FINAL * 39,
-      SPECIES == "ELEL" ~ FLWR_FINAL * 93,
-      SPECIES == "BRTE" ~ FLWR_FINAL * 88,
-      TRUE ~ 0
-    )
-  ) %>%
-  group_by(BARREL, SPECIES) %>% 
-  summarise(Total_seeds = sum(Seed_tot, na.rm = TRUE),
-            .groups = "drop")
-
-SDdata_23_test <- species_lookup_23 %>%
-  left_join(SDdata_23_calc, by = c("BARREL", "SPECIES")) %>%
-  mutate(Total_seeds = replace_na(Total_seeds, 0))
-
-
-
-SDdata_23 <- Pdata23_clean %>% 
-  select(BARREL, SPECIES, FLWR_FINAL, ) %>% 
-  group_by(BARREL, SPECIES) %>% 
-  mutate(
-    Seed_tot = case_when(
-      SPECIES == "LAGL" ~ FLWR_FINAL * 39,
-      SPECIES == "ELEL" ~ FLWR_FINAL * 93,
-      SPECIES == "BRTE" ~ FLWR_FINAL * 88,
-      TRUE ~ NA_real_)) %>% 
-  group_by(BARREL, SPECIES) %>% 
-  summarise(
-    Total_seeds = sum(Seed_tot, na.rm = TRUE),
-    .groups = "drop")
-
-SDdata_23_calc <- Pdata23_clean %>% 
-  select(BARREL, SPECIES, FLWR_FINAL) %>% 
-  mutate(
-    Seed_tot = case_when(
-      SPECIES == "LAGL" ~ FLWR_FINAL * 39,
-      SPECIES == "ELEL" ~ FLWR_FINAL * 93,
-      SPECIES == "BRTE" ~ FLWR_FINAL * 88,
-      TRUE ~ 0
-    )
-  ) %>%
-  group_by(BARREL, SPECIES) %>% 
-  summarise(Total_seeds = sum(Seed_tot, na.rm = TRUE),
-            .groups = "drop")
-
-
-
-
-
-
-
-SDdata_22 <- SDdata_23 %>%
-  mutate(Total_seeds = case_when(
-    SPECIES == "ELEL" ~ 105,
-    SPECIES == "LAGL" ~ 130,
-    SPECIES == "ARTR" ~ 230,
-    SPECIES == "BRTE" ~ 130,
-    TRUE ~ Total_seeds))
-
-SDdata_24 <- read_xlsx("2024 Data_Clean.xlsx", sheet = "seed count total")
-SDdata_24 <- SDdata_24 %>% select(`Barrel ID`, `BRTE Seeds`, `LAGL Seeds`, `ELEL Seeds`, `ARTR Seeds`) %>% 
-  rename(Barrel = matches("BARREL"),
-         BRTE = matches("BRTE"), LAGL = matches("LAGL"), ELEL = matches("ELEL"), ARTR = matches("ARTR"))
-SDdata_24 <- SDdata_24[-160,] # remove "total" row sum
-
-SDdata_24 <- SDdata_24 %>% 
-  pivot_longer(cols = c(BRTE, LAGL, ELEL, ARTR),values_to = "Total_seeds",
-               names_to =  "Species") 
-
-
-
-
-
-
-
-
-
-
-# model will have to wait
 ################
 # next up is LAGL and repeat seeding on BRTE
 count_new_trt
 
-##### Plots counts of BRTE and LAGL by year and treatmnt
-ggplot(data = count_new_trt %>% filter(Species == c("BRTE", "LAGL")), ##### Plots counts of BRTE and LAGL by year and treatmnt
-       aes(x = Species, y = Count, fill = Treatment)) + 
-  geom_boxplot() + facet_wrap(~Year, scales = "free_y")
 
-count_wide <- count_new_trt %>%
+count_plot_df <- count_new_trt %>%
+  mutate(
+    # get part before "_" (e.g., "BA", "LA", "E", "A")
+    CodePre = sub("_.*", "", Trt),
+    
+    # logicals: which species letters are present in the treatment?
+    Has_B = grepl("B", CodePre),
+    Has_L = grepl("L", CodePre),
+    Has_E = grepl("E", CodePre),
+    Has_A = grepl("A", CodePre),
+    
+    # species seeded in that barrel (may be multiple!)
+    SeededSpecies = case_when(
+      Species == "BRTE" & Has_B ~ "BRTE",
+      Species == "LAGL" & Has_L ~ "LAGL",
+      Species == "ELEL" & Has_E ~ "ELEL",
+      Species == "ARTR" & Has_A ~ "ARTR",
+      TRUE ~ NA_character_
+    ),
+    
+    Seeded = !is.na(SeededSpecies))
+
+
+count_plot_df %>% count(Species, Seeded)
+
+ggplot(
+  count_plot_df %>% 
+    filter(Seeded == TRUE, Species %in% c("BRTE", "LAGL")),
+  aes(x = Species, y = Count, fill = Treatment)
+) +
+  geom_boxplot() +
+  facet_wrap(~Year, scales = "free_y") +
+  scale_fill_brewer(palette = "Set2") +
+  theme_light()
+
+
+
+
+
+##### Plots counts of BRTE and LAGL by year and treatmnt
+ggplot(data = count_plot_df %>% filter(Species == c("BRTE", "LAGL")), ##### Plots counts of BRTE and LAGL by year and treatmnt
+       aes(x = Species, y = Count, fill = Treatment)) + 
+  geom_boxplot() + facet_wrap(~Year, scales = "free_y") + 
+  scale_fill_brewer(palette = "Set2")
+
+count_wide <- count_plot_df %>%
   select(BARREL, Year, Treatment,Trt, Species, Count) %>%
   pivot_wider(
     names_from = Species,
@@ -543,8 +492,8 @@ count_wide <- count_new_trt %>%
 
 
 
-plot2 <- ggplot(count_wide,
-                aes(x = Treatment, y = BRTE, fill = Treatment)) +
+plot2 <- ggplot(count_plot_df %>%  filter(Seeded == TRUE, Species %in% c("BRTE", "LAGL"),
+                aes(x = Treatment, y = BRTE, fill = Treatment))) +
   geom_boxplot(alpha = 0.9) +
   theme_bw() +
   labs(
@@ -552,7 +501,7 @@ plot2 <- ggplot(count_wide,
     y = "BRTE Count",
     title = "Effect of Repeated LAGL Seeding on BRTE Counts"
   ) +
-  guides(fill = "none")+ scale_fill_brewer(palette = "Set2")
+  + scale_fill_brewer(palette = "Set2")
 
 plot2
 
@@ -605,39 +554,241 @@ count_long <- count_long %>%
              by = c("BARREL", "SPECIES"))
 
 
+##################
+### Model time ###
+##################
 
-##########
-# 1) Figure of abundance changes year to year
-ggplot(count_long, aes(x = SPECIES, y = Count, fill = Trt)) +
-  geom_boxplot(outliers = F) +
-  facet_wrap(~Year) + labs(
-    title = "Abundance per barrel by Species Across Years",
-    x = "Species",
-    y = "Count",
-    fill = "Treatment"
-  ) 
+# simple linear model of seeds in to seeds out each year
 
-##########
-# 2) Species Trt w/ BRTE
-count_long %>% filter(., SPECIES == "BRTE") %>% 
-ggplot( aes(x = Trt, y = Count, fill = Trt)) +
-  geom_boxplot(outliers = F) 
+# start by setting up the seed data
+##### 2022 
+SDdata_22 <- barrelkey_expanded
+glimpse(test_22)
 
+SDdata_22 <- SDdata_22 %>% 
+  mutate(Total_seeds = case_when(
+    SPECIES == "ELEL" ~ 105,
+    SPECIES == "LAGL" ~ 130,
+    SPECIES == "ARTR" ~ 230,
+    SPECIES == "BRTE" ~ 130,
+    TRUE ~ NA_real_
+  ))
 
-ggplot(count_long, aes(x = Year, y = Count, color = Species,
-                       group = interaction(BARREL, Species))) +
-  geom_line()
+glimpse(SDdata_22)
 
-########
-# line graph trend of counts of germinates by species per year
-species_means <- count_long %>%
-  group_by(Species, Year) %>%
-  summarise(mean_count = mean(Count, na.rm = TRUE),
+###### 2023 
+SDdata_23_calc <- Pdata23_clean %>% 
+  select(BARREL, SPECIES, FLWR_FINAL) %>% 
+  mutate(
+    Seed_tot = case_when(
+      SPECIES == "LAGL" ~ FLWR_FINAL * 39,
+      SPECIES == "ELEL" ~ FLWR_FINAL * 93,
+      SPECIES == "BRTE" ~ FLWR_FINAL * 88,
+      TRUE ~ 0
+    )
+  ) %>%
+  group_by(BARREL, SPECIES) %>% 
+  summarise(Total_seeds = sum(Seed_tot, na.rm = TRUE),
             .groups = "drop")
- 
-ggplot(species_means, aes(x = Year, y = mean_count)) +
-  geom_line(aes(colour = Species), linewidth = 2)
+
+SDdata_23_test <- species_lookup_23 %>%
+  left_join(SDdata_23_calc, by = c("BARREL", "SPECIES")) %>%
+  mutate(Total_seeds = replace_na(Total_seeds, 0))
+
+
+
+SDdata_23 <- Pdata23_clean %>% 
+  select(BARREL, SPECIES, FLWR_FINAL, ) %>% 
+  group_by(BARREL, SPECIES) %>% 
+  mutate(
+    Seed_tot = case_when(
+      SPECIES == "LAGL" ~ FLWR_FINAL * 39,
+      SPECIES == "ELEL" ~ FLWR_FINAL * 93,
+      SPECIES == "BRTE" ~ FLWR_FINAL * 88,
+      TRUE ~ NA_real_)) %>% 
+  group_by(BARREL, SPECIES) %>% 
+  summarise(
+    Total_seeds = sum(Seed_tot, na.rm = TRUE),
+    .groups = "drop")
+
+SDdata_23_calc <- Pdata23_clean %>% 
+  select(BARREL, SPECIES, FLWR_FINAL) %>% 
+  mutate(
+    Seed_tot = case_when(
+      SPECIES == "LAGL" ~ FLWR_FINAL * 39,
+      SPECIES == "ELEL" ~ FLWR_FINAL * 93,
+      SPECIES == "BRTE" ~ FLWR_FINAL * 88,
+      TRUE ~ 0
+    )
+  ) %>%
+  group_by(BARREL, SPECIES) %>% 
+  summarise(Total_seeds = sum(Seed_tot, na.rm = TRUE),
+            .groups = "drop")
+
+SDdata_23 <- full_join(barrelkey_expanded, SDdata_23_calc)
+glimpse(SDdata_23)
+SDdata_23 <- SDdata_23_test %>% 
+  mutate(Total_seeds = case_match(
+    Total_seeds,
+    NA ~ 0,
+    .default = Total_seeds))
+
+glimpse(SDdata_23)
 
 
 
 
+#### 2024
+SDdata_24 <- read_xlsx("2024 Data_Clean.xlsx", sheet = "seed count total")
+SDdata_24 <- SDdata_24 %>% select(`Barrel ID`, `BRTE Seeds`, `LAGL Seeds`, `ELEL Seeds`, `ARTR Seeds`) %>% 
+  rename(BARREL = matches("Barrel"),
+         BRTE = matches("BRTE"), LAGL = matches("LAGL"), ELEL = matches("ELEL"), ARTR = matches("ARTR")) %>% 
+  mutate(BARREL = as.integer(BARREL))
+SDdata_24 <- SDdata_24[-160,] # remove "total" row sum
+
+SDdata_24 <- SDdata_24 %>% 
+  pivot_longer(cols = c(BRTE, LAGL, ELEL, ARTR),values_to = "Total_seeds",
+               names_to =  "SPECIES") 
+
+SDdata_24_test <- SDdata_24 %>% 
+  left_join(barrelkey_expanded)
+
+SDdata_24_test <- SDdata_24_test %>%
+  filter(!is.na(LH_combo))
+
+SDdata_24 <- SDdata_24_test
+
+
+#### 2025 
+SDdata_25 <- read_xlsx("2025 Data.xlsx", sheet = "Total Seeds Barrel")
+SDdata_25 <- SDdata_25 %>% select(`Barrel ID`, BRTE, LAGL, ELEL, ARTR) %>% 
+  rename(BARREL = matches("BARREL"))
+
+
+SDdata_25 <- SDdata_25 %>% 
+  pivot_longer(cols = c(BRTE, LAGL, ELEL, ARTR),values_to = "Total_seeds",
+               names_to =  "SPECIES")
+
+
+SDdata_25_test <- SDdata_25 %>% 
+  left_join(barrelkey_expanded)
+
+SDdata_25_test <- SDdata_25_test %>%
+  filter(!is.na(LH_combo))
+
+
+SDdata_25 <- SDdata_25_test
+# join to barrel-key to match 2022, 2023, 2024
+
+SDdata_22
+SDdata_23
+SDdata_24
+SDdata_25
+
+
+### combine all SDdata years
+
+SD_all <- bind_rows(
+  SDdata_22 %>% mutate(Year = 2022),
+  SDdata_23 %>% mutate(Year = 2023),
+  SDdata_24 %>% mutate(Year = 2024),
+  SDdata_25 %>% mutate(Year = 2025)
+)
+
+SD_all <- SD_all %>%
+  arrange(BARREL, SPECIES, Year)
+
+SD_all_mod <- SD_all %>%
+  group_by(BARREL, SPECIES) %>%
+  mutate(Total_seeds_prev = lag(Total_seeds),
+    seed_ratio = Total_seeds / Total_seeds_prev) %>% ungroup()
+
+SD_all_mod <- SD_all_mod %>%
+  group_by(BARREL, SPECIES) %>%
+  mutate(
+    seed_ratio = if_else(
+      !is.na(lag(Total_seeds)) & lag(Total_seeds) > 0,
+      Total_seeds / lag(Total_seeds),
+      NA_real_)) %>% ungroup()
+
+# 
+# SD_all_mod_test %>%
+#   filter(Year > 2022) %>%
+#   count(is.na(seed_ratio), is.infinite(seed_ratio))
+
+# # set up response variable (BRTE)
+# Brte_lag <- SD_all_mod %>% select(BARREL, SPECIES, Year, seed_ratio) %>% 
+#   filter(SPECIES == "BRTE", !is.na(seed_ratio))
+# 
+# # Set up predictor variables (other species)
+# LAGL_lag <- SD_all_mod %>% select(BARREL, SPECIES, Year, Total_seeds, seed_ratio) %>% 
+#   filter(SPECIES == "LAGL", !is.na(seed_ratio))
+
+test_mod <- lm(data = SD_all_mod, formula = Total_seeds ~ Trt + SPECIES)
+
+
+
+# model time
+
+# to do
+# write stan code
+library(StanHeaders)
+library(rstan)
+library(brms)
+
+# do brms first
+library(dplyr)
+
+brte_dat <- SD_all_mod %>%
+  filter(SPECIES == "BRTE",
+    Year > 2022,
+    !is.na(seed_ratio)) %>%
+  mutate(log_seed_ratio = log(seed_ratio)) %>% # create response category
+  left_join(SD_all_mod %>%
+      filter(Year > 2022) %>%
+      select(BARREL, Year, SPECIES, Total_seeds) %>%
+      tidyr::pivot_wider(
+        names_from = SPECIES,
+        values_from = Total_seeds,
+        values_fill = 0), by = c("BARREL", "Year"))
+
+
+brms_fit <- brm(
+  formula = log_seed_ratio ~ 
+    LAGL + ELEL + ARTR + (1 | Year),
+  data = brte_dat,
+  family = gaussian(),
+  prior = c(
+    prior(normal(0, 1), class = "b"),
+    prior(normal(0, 1), class = "Intercept"),
+    prior(exponential(1), class = "sd"),
+    prior(exponential(1), class = "sigma")),
+  chains = 4,
+  cores = 4,
+  iter = 4000,
+  control = list(adapt_delta = 0.95))
+
+summary(brms_fit)
+posterior_summary(brms_fit, variable = c(
+  "b_Intercept",
+  "b_LAGL", 
+  "b_ELEL",
+  "b_ARTR"
+))
+
+
+
+
+
+modeldata <- list(years = 3, # 2023, 2024, 2025
+                  B = length(unique(SD_all_mod$BARREL)),
+                  N = length(SD_all_mod_test$BARREL), 
+                  BRTE = Brte_lag,
+                  LAGL = ,
+                  ELEL = ,
+                  ARTR = SD_all_mod$)
+
+# Run the model
+BRTE_fitness_mod <- stan(file = "fitness_lm.stan",
+            data = modeldata, 
+            chains = 3,iter = 2000, warmup = 1000)
