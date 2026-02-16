@@ -29,10 +29,10 @@ Cdata23 <- Cdata23 %>% # Remove all Unknown plants
 Cdata24 <- read_xlsx("2024 Data_Clean.xlsx", sheet = 1)
 Pdata24 <- read_xlsx("2024 Data_Clean.xlsx", sheet = 2)
 
-Cdata25 <- read_xlsx("2025 Data.xlsx", sheet = 1) # counts of species in each barrel
-Pdata25 <- read_xlsx("2025 Data.xlsx", sheet = 2)
+Cdata25 <- read_xlsx("2025 Data.xlsx", sheet = 2) # counts of species in each barrel
+Pdata25 <- read_xlsx("2025 Data.xlsx", sheet = 1)
 # clean it up
-Pdata25 <- Pdata25[, -3] # extra row
+Pdata25
 
 
 
@@ -154,8 +154,6 @@ Pdata24_clean <- clean_pdata(Pdata24, 2024)
 Pdata24_clean <- Pdata24_clean %>% 
   dplyr::select(., BARREL, SPECIES, PLANT_ID, TOOTHPICK, QUAD, DESIGNATION, HT_FINAL, FLWR_2, UID, Year)
 
-Pdata25 <- Pdata25 %>% 
-  mutate(PLANT_ID = NA)
 
 Pdata25_clean <- clean_pdata(Pdata25, 2025)
 
@@ -279,16 +277,148 @@ count_new_trt <- count_new %>%
                       AL_A = "Repeated" ,
                       BA_A = "Repeated" ,
                       BL_1 = "Control" , AL_1 = "Control" , BE_1 = "Control" , BA_1 = "Control" , LE_1 = "Control" ))
+# need to be able to tell which barrels actually have 0 plants per species vs have 0 becuase no seeds were input
 
-# 
-# count_new <- count_new %>%
-#   rename(`I-F` = BRTE,
-#          `N-F` = LAGL,
-#          `N-M` = ELEL,
-#          `N-S` = ARTR)
+#
+count_plot_df <- count_new_trt %>%
+  mutate(
+    # get part before "_" (e.g., "BA", "LA", "E", "A")
+    CodePre = sub("_.*", "", Trt),
+    
+    # logicals: which species letters are present in the treatment?
+    Has_B = grepl("B", CodePre),
+    Has_L = grepl("L", CodePre),
+    Has_E = grepl("E", CodePre),
+    Has_A = grepl("A", CodePre),
+    
+    # species seeded in that barrel (may be multiple!)
+    SeededSpecies = case_when(
+      Species == "BRTE" & Has_B ~ "BRTE",
+      Species == "LAGL" & Has_L ~ "LAGL",
+      Species == "ELEL" & Has_E ~ "ELEL",
+      Species == "ARTR" & Has_A ~ "ARTR",
+      TRUE ~ NA_character_
+    ), Seeded = !is.na(SeededSpecies)) # creates a seeded species column. 
 
 
-count_long <- count_new_trt 
+ggplot(
+  count_plot_df %>% 
+    filter(Seeded == TRUE),
+  aes(x = Year, y = Count, fill = Treatment)
+) +
+  geom_boxplot() +
+  facet_wrap(~Species, scales = "free_y") +
+  scale_fill_brewer(palette = "Set2") +
+  theme_light()
+
+
+# show all species and all years
+ggplot(count_plot_df %>% 
+         filter(Seeded == TRUE), 
+       aes(x = factor(Year), y = Count, fill = factor(Treatment))) +
+  geom_boxplot(alpha = 0.9) +
+  facet_wrap(~Species, scales = "free_y") +
+  #theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+  ggtitle("Plant Counts by Species and Treatment") +
+  xlab("Year") + ylab("Plant Count")+
+  labs(fill = "Treatment") + 
+  theme_light()+
+  scale_fill_brewer(palette = "Set2") + 
+  theme(legend.position = "bottom")
+
+
+#### go species by species
+# ARTR
+ggplot(count_plot_df %>% 
+         filter(Seeded == TRUE, Species == "ARTR"), 
+       aes(x = factor(Year), y = Count, fill = factor(Treatment))) +
+  geom_boxplot(alpha = 0.9) +
+  #theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+  ggtitle("Sagebrush (ARTR) Counts by Year and Treatment") +
+  xlab("Year") + ylab("New Plant Count")+
+  labs(fill = "Treatment") + 
+  theme_light()+
+  scale_fill_brewer(palette = "Set2") + 
+  theme(legend.position = "bottom")
+
+
+
+# ELEL
+ggplot(count_plot_df %>% 
+         filter(Seeded == TRUE, Species == "ELEL"), 
+       aes(x = factor(Year), y = Count, fill = factor(Treatment))) +
+  geom_boxplot(alpha = 0.9) +
+  #theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+  ggtitle("Squirreltail (ELEL) Counts by Year and Treatment") +
+  xlab("Year") + ylab("New Plants Count")+
+  labs(fill = "Treatment") + 
+  theme_light()+
+  scale_fill_brewer(palette = "Set2") + 
+  theme(legend.position = "bottom")
+
+
+# LAGL
+ggplot(count_plot_df %>% 
+         filter(Seeded == TRUE, Species == "LAGL"), 
+       aes(x = factor(Year), y = Count, fill = factor(Treatment))) +
+  geom_boxplot(alpha = 0.9) +
+  #theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+  ggtitle("Tidytips (LAGL) Counts by Year and Treatment") +
+  xlab("Year") + ylab("New Plants Count")+
+  labs(fill = "Treatment") + 
+  theme_light()+
+  scale_fill_brewer(palette = "Set2") + 
+  theme(legend.position = "bottom")
+
+
+# BRTE
+ggplot(count_plot_df %>% 
+         filter(Seeded == TRUE, Species == "BRTE"), 
+       aes(x = factor(Year), y = Count, fill = factor(Treatment))) +
+  geom_boxplot(alpha = 0.9) +
+  #theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+  ggtitle("Cheatgrass (BRTE) Counts by Year and Treatment") +
+  xlab("Year") + ylab("New Plants Count")+
+  labs(fill = "Treatment") + 
+  theme_light()+
+  scale_fill_brewer(palette = "Set2") + 
+  theme(legend.position = "bottom")
+
+
+### It's important to show the cumulative data for surviving slow LH plants
+
+# start by adding a treatment column.
+trt_lookup <- count_plot_df %>% group_by(BARREL) %>% filter(Seeded ==!F & Year == 2024) %>% 
+  select(BARREL,Trt, Treatment, SeededSpecies)
+print(trt_lookup)
+
+trt_lookup <- count_plot_df %>% 
+  filter(Seeded, Year == 2024) %>% 
+  select(BARREL, Trt, Treatment) %>% 
+  distinct()
+
+Pdata25_clean <- Pdata25_clean %>% 
+  left_join(trt_lookup, by = "BARREL")
+
+
+
+
+# prep data for plots
+# need count column
+# start with just 2025
+Pdata25_clean_test <- 
+
+
+
+Pdata25_clean %>% filter(SPECIES == "ELEL")
+ggplot(data = Pdata25_clean %>% filter(SPECIES == "ELEL"),
+       aes(x= Species, y = count )) +
+  geom_boxplot()
+
+
+
+
+# count_long <- count_new_trt 
 
 
 diffplot_25 <- ggplot(count_new_trt %>% filter(Year == 2025), 
@@ -318,13 +448,25 @@ diffplot_all <- ggplot(count_new_trt,
 
 diffplot_all
 
+####### Take out the BRTE from the ######
+# Set it as 3 panels first??? 
+
+
+
+
+
+
+
+
+
+
 
 ####### focus on one plot per species
 ### LAGL
 ggplot(count_new_trt %>% filter(Species == "LAGL"), 
        aes(x = factor(Year), y = Count, fill = Treatment)) +
   geom_boxplot(outliers = F, alpha = 0.9) +
-#  facet_wrap(~Species, scales = "free_y") +
+  facet_wrap(~Species, scales = "free_y") +
   #theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
   ggtitle("LAGL abundance by Seeding Treatment", subtitle = "All years") +
   xlab("Year") + ylab("Count")+
@@ -360,78 +502,6 @@ ggplot(count_new_trt %>% filter(Species == "ARTR"),
   scale_fill_brewer(palette = "Set2")
 
 
-####### quick stats
-library(tidyverse)
-library(emmeans)
-library(multcomp)
-library(multcompView)
-
-df <- count_new  # or count_new_trt (either works)
-
-# ---- 1. Run ANOVA by species ----
-library(tidyverse)
-library(emmeans)
-library(multcomp)
-library(multcompView)
-
-anova_results <- count_new_trt %>%
-  group_by(Species) %>%
-  group_modify(~{
-    
-    df_sub <- .x   # .x is the data for each species
-    
-    # Run ANOVA
-    mod <- aov(Count ~ Treatment, data = df_sub)
-    
-    # Tukey
-    tk  <- emmeans(mod, pairwise ~ Treatment)
-    cld <- multcomp::cld(tk$emmeans)
-    
-    # Extract letters
-    cld_tbl <- cld %>%
-      as.data.frame() %>%
-      select(Treatment, .group)
-    
-    # Summary stats for annotation placement
-    sum_stats <- df_sub %>%
-      group_by(Treatment) %>%
-      summarise(
-        mean_count = mean(Count, na.rm = TRUE),
-        sd_count   = sd(Count, na.rm = TRUE),
-        .groups = "drop"
-      )
-    
-    # Return one row per treatment per species
-    left_join(sum_stats, cld_tbl, by = "Treatment") %>%
-      mutate(Species = unique(df_sub$Species))
-  }) %>%
-  ungroup()
-
-
-treatment_plot <- ggplot(count_new_trt, aes(x = Treatment, y = Count, fill = Treatment)) +
-  geom_boxplot(alpha = 0.9) +
-  facet_wrap(~Species, scales = "free_y") +
-  theme_light() +
-  ggtitle("Treatment Effects on Species Counts") +
-  ylab("Count") +
-  xlab("Treatment") +
-  scale_fill_brewer(palette = "Set2") +
-  
-  geom_text(
-    data = anova_results,
-    aes(
-      x = Treatment,
-      y = mean_count + sd_count * 2.2,   # scalable offset above box
-      label = .group
-    ),
-    size = 6,
-    fontface = "bold",
-    color = "black",
-    stroke = 0.35,       # adds white outline
-    linewidth = 0.35
-  )
-
-treatment_plot
 
 ################
 # next up is LAGL and repeat seeding on BRTE
@@ -456,9 +526,7 @@ count_plot_df <- count_new_trt %>%
       Species == "ELEL" & Has_E ~ "ELEL",
       Species == "ARTR" & Has_A ~ "ARTR",
       TRUE ~ NA_character_
-    ),
-    
-    Seeded = !is.na(SeededSpecies))
+    ), Seeded = !is.na(SeededSpecies))
 
 
 count_plot_df %>% count(Species, Seeded)
@@ -478,35 +546,29 @@ ggplot(
 
 
 ##### Plots counts of BRTE and LAGL by year and treatmnt
-ggplot(data = count_plot_df %>% filter(Species == c("BRTE", "LAGL")), ##### Plots counts of BRTE and LAGL by year and treatmnt
+ggplot(data = count_plot_df %>% filter(Seeded == T ,Species == c("BRTE", "LAGL")), ##### Plots counts of BRTE and LAGL by year and treatmnt
        aes(x = Species, y = Count, fill = Treatment)) + 
   geom_boxplot() + facet_wrap(~Year, scales = "free_y") + 
   scale_fill_brewer(palette = "Set2")
 
-count_wide <- count_plot_df %>%
-  select(BARREL, Year, Treatment,Trt, Species, Count) %>%
-  pivot_wider(
-    names_from = Species,
-    values_from = Count,
-    values_fill = 0)
 
 
 
-plot2 <- ggplot(count_plot_df %>%  filter(Seeded == TRUE, Species %in% c("BRTE", "LAGL"),
-                aes(x = Treatment, y = BRTE, fill = Treatment))) +
-  geom_boxplot(alpha = 0.9) +
+ggplot(count_plot_df %>%  filter(Seeded == TRUE, Species == c("BRTE", "LAGL")),
+                aes(x = Species, y = Count, fill = Treatment)) +
+  geom_boxplot() +
   theme_bw() +
   labs(
     x = "",
     y = "BRTE Count",
     title = "Effect of Repeated LAGL Seeding on BRTE Counts"
-  ) +
+  ) 
   + scale_fill_brewer(palette = "Set2")
 
-plot2
 
 
-int_plot <- ggplot(count_wide, 
+
+int_plot <- ggplot(data = count_plot_df %>% filter(Seeded == T ,Species == c("BRTE", "LAGL")),
                 aes(x = LAGL, y = BRTE, color = Treatment)) +
   geom_point(alpha = 0.9) +
   geom_smooth(method = "lm", se = FALSE, linewidth = 1) +
