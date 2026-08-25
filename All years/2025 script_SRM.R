@@ -325,7 +325,7 @@ aov_count_data <- aov_count_data %>%
       Species == "ARTR" & Year == 2025 & is.na(Count) ~ 0,
       TRUE ~ Count))
 
-which(is.na(aov_count_data_t$Count))
+#which(is.na(aov_count_data_t$Count))
 
 aov_trt_all <- aov(Count ~ Treatment,
                data = aov_count_data)
@@ -435,6 +435,10 @@ ggplot(data = count_plot_df %>% filter(Species == "ARTR" & Seeded == T),
 
 # show all species and all years
 
+#add BRTE to levels
+count_plot_df <- count_plot_df %>% mutate(Species = factor(Species, levels = c("BRTE", "LAGL", "ELEL", "ARTR")))
+
+
 ggplot(count_plot_df %>% 
          filter(Seeded == TRUE & Species != "BRTE"), 
        aes(x = factor(Year), y = Count, fill = factor(Treatment))) +
@@ -457,18 +461,56 @@ ggplot(count_plot_df %>%
 
 
 ggplot(count_plot_df %>% 
-         filter(Seeded == TRUE & !Species == "BRTE" & !Year == 2023), 
+         filter(Seeded == TRUE & !Species == "BRTE"), #& !Year == 2023), 
        aes(x = factor(Year), y = Count, fill = factor(Treatment))) +
   geom_boxplot(alpha = 0.9, outliers = F) +
-  facet_wrap(~Species, scales = "free_y") +
+  facet_wrap(~Species)  + # don't foreget about scales = "free_y"
   #theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
-  ggtitle("Plant Counts by Species and Treatment") +
+  #ggtitle("Plant Counts by Species and Treatment") +
+  xlab("Year") + ylab("Plant Count")+
+  labs(fill = "Treatment") + 
+  theme_light()+
+  scale_fill_brewer(palette = "Set2") + 
+  theme(legend.position = "bottom", 
+        axis.title.x = element_text(size = 16),
+        axis.title.y = element_text(size = 16),
+        axis.text.x  = element_text(size = 12),
+        axis.text.y  = element_text(size = 12),
+        legend.title = element_text(size = 16),
+        legend.text  = element_text(size = 12),
+        legend.key.size = unit(1.25, "cm"))
+
+
+
+ggplot(count_plot_df %>% 
+         filter(Seeded == TRUE), #& !Year == 2023), 
+       aes(x = factor(Year), y = Count, fill = factor(Treatment))) +
+  geom_boxplot(alpha = 0.9, outliers = F) +
+  facet_wrap(~Species, nrow = 1)  + # don't forget about scales = "free_y"
+  #theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+  #ggtitle("Plant Counts by Species and Treatment") +
+  xlab("Year") + ylab("Plant Count")+
+  labs(fill = "Treatment") + 
+  theme_light()+
+  scale_fill_brewer(palette = "Set2")
+
+
+
+
+
+
+ggplot(count_plot_df %>% 
+         filter(Seeded == TRUE & !Species == "BRTE"), # & !Year == 2023), 
+       aes(x = factor(Year), y = Count, fill = factor(Treatment))) +
+  geom_boxplot(alpha = 0.9, outliers = F) +
+  facet_wrap(~Species, scales = "free_y")  + # don't foreget about scales = "free_y"
+  #theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+  #ggtitle("Plant Counts by Species and Treatment") +
   xlab("Year") + ylab("Plant Count")+
   labs(fill = "Treatment") + 
   theme_light()+
   scale_fill_brewer(palette = "Set2") + 
   theme(legend.position = "bottom")
-
 
 ########################
 # Linear Models #
@@ -580,7 +622,15 @@ brte_long <- brte_comp_df %>%
   filter(!is.na(Comp_Count)) %>%      # keep the actual competitor
   mutate(Competitor = factor(Competitor, levels = c("LAGL", "ELEL", "ARTR")), 
          BARREL     = factor(BARREL),
-         Year       = factor(Year))
+         Year       = factor(Year),
+         Treatment = factor(Treatment, levels = c("Repeated", "Single")))
+
+brte_long_pred_df <- brte_long %>%
+  mutate(Competitor_LH = case_when(
+      Competitor == "LAGL" ~ "Fast",
+      Competitor == "ELEL" ~ "Medium",
+      Competitor == "ARTR" ~ "Slow"), Competitor_LH = factor(Competitor_LH,
+                           levels = c("Fast", "Medium", "Slow")))
 
 library(glmmTMB)
 
@@ -600,8 +650,8 @@ pred <- ggpredict(
 
 plot(pred) +
   theme_light() +
-  labs(x = "Competitor abundance",
-    y = "Predicted BRTE count")
+  labs(x = "Native abundance",
+    y = "Predicted Invasive Abundance")
 
 
 brte_long_1 <- brte_long %>% mutate(Competitor = case_when(Competitor == "LAGL" ~ "FAST", 
@@ -613,12 +663,12 @@ ggplot(brte_long_1,
        aes(x = Comp_Count, y = BRTE,
            color = Treatment)) +
   geom_point(alpha = 0.6) +
-  geom_smooth(method = "lm", se = FALSE) +
+  geom_smooth(method = "lm", se = F, linewidth = 1.2, alpha = 0.8) +
   facet_wrap(~ Competitor, scales = "free_x") +
   theme_light() +
   labs(
-    x = "Competitor Abundance",
-    y = "Observed BRTE Abundance") + scale_color_brewer(palette = "Set2") + 
+    x = "Native Abundance",
+    y = "Invasive Abundance") + scale_color_brewer(palette = "Set2") + 
   theme(legend.position = "bottom")
 
 
@@ -809,7 +859,7 @@ ggplot(count_BRTE_df, aes(x = Year, y = BRTE, fill = Treatment)) +
   theme_light() +
   labs(title = " ", # no title
        x = "Treatment",
-       y = "BRTE Count",
+       y = "Invader Count",
        fill = "Treatment") +
   theme(legend.position = "bottom", strip.text = element_text(face = "bold"))
 
@@ -1234,7 +1284,7 @@ legend("topleft",
 
 ############
 # Species A (fast LH)
-r_A <- 0.15
+r_A <- 0.1
 sp_A_vect[1] <- 20
 
 for(i in 1:9){
@@ -1275,11 +1325,11 @@ lines(t, sp_B_SUPP,
 
 lines(t, sp_C_vect,
       lwd = 4,
-      col = "#A63A50")
+      col = "#F6B505")
 
 legend("topleft",
        legend = c("Fast LH", "Slow LH", "Slow LH Repeated", "Native Fast LH"),
-       col = c("#E7A864", "#AAC7B9", "#6F7C12", "#A63A50"),
+       col = c("#E7A864", "#AAC7B9", "#6F7C12", "#F6B505"),
        lwd = 4,
        bty = "n")
 
@@ -1376,11 +1426,27 @@ ggplot(LRR_count_df %>% filter(!Species == "BRTE"),
        y = "Log Response Ratio",
        x = "Year") +
   scale_fill_manual(values = colors_vect2) + 
-  theme(
-    legend.title = element_text(size = 16),
+  theme(, 
+        axis.title.x = element_text(size = 18),
+        axis.title.y = element_text(size = 18),
+        axis.text.x  = element_text(size = 16),
+        axis.text.y  = element_text(size = 16),
+        legend.title = element_text(size = 16),
     legend.text  = element_text(size = 12),
-    legend.key.size = unit(1.5, "cm")
-  )
+    legend.key.size = unit(1.25, "cm"))
+
+
+### make axes text larger:
+# theme(
+#     axis.title.x = element_text(size = 18),
+#     axis.title.y = element_text(size = 18),
+#     axis.text.x  = element_text(size = 16),
+#     axis.text.y  = element_text(size = 16),
+#     legend.title = element_text(size = 16),
+#     legend.text  = element_text(size = 14),
+#     legend.key.size = unit(1.5, "cm"))
+
+
 
 
 ggplot(LRR_count_df %>% filter(Species != "BRTE"), 
@@ -1396,19 +1462,9 @@ ggplot(LRR_count_df %>% filter(Species != "BRTE"),
   theme(
     legend.title = element_text(size = 16),
     legend.text  = element_text(size = 12),
-    legend.key.size = unit(1.5, "cm")
-  )
+    legend.key.size = unit(1.5, "cm"))
 
 
-ggplot(LRR_count_df %>% filter(Species != "BRTE"), 
-       aes(x = Year, y = LRR, fill = Species)) +
-  geom_col(alpha = 0, position = "dodge") +  # invisible bars → legend appears
-  geom_hline(yintercept = 0, linetype = "dashed") +
-  theme_light() +
-  labs(title = "",
-       y = "Log Response Ratio",
-       x = "Year") +
-  guides(fill = guide_legend(override.aes = list(alpha = 1)))
 
 
 
