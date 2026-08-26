@@ -372,16 +372,40 @@ pp_check(mod_2, ndraws = 10)
 
 
 ### model with year RE
-mod_3 <- brms::brm(Count ~ LH * Treatment + (1 | Year), 
+mod_3 <- brms::brm(Count ~ LH_2 * Treatment + (1 | Year), 
                    data = count_df_mod, 
                    family = negbinomial(),
-                   iter = 3000, warmup = 1000, chains = 3)
+                   iter = 4000, warmup = 1000, chains = 3, cores = 4)
 
 summary(mod_3)
 plot(mod_3)
 pp_check(mod_3, ndraws = 10)
 
+summary(mod_3)$fixed[, 5:7]
 
+# quick and dirty plot on the original scale
+plot(conditional_effects(mod_3), ask = FALSE)
+
+posterior_3 <- as.matrix(mod_3)
+
+mcmc_areas(posterior_3,
+           pars = c("b_TreatmentRepeated", "b_LH_2FAST_N:TreatmentRepeated", "b_LH_2MEDIUM:TreatmentRepeated"),
+           # arbitrary threshold for shading probability mass
+           prob = 0.9) 
+
+########
+# Want to graph the posteriors of the predictors 
+library(tidybayes)
+post_data <- count_df_mod %>% 
+  expand_grid(LH_2, Treatment) %>%
+  add_fitted_draws(mod_3, n = 9000, re_formula = NA)
+
+
+
+
+
+
+data_grid
 ### most complex model
 # how does abundance vary with LH and treatment 
 #   allowing for abundance to vary among barrels and change differently over years
