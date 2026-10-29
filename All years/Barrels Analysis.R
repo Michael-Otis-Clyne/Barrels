@@ -6,8 +6,10 @@
 library(tidyverse)
 library(readxl)
 library(rstan)
+library(rstanarm)
 library(brms)
 library(bayesplot)
+
 #### What this script aims to do
 # 1. Organize data from all years
 # 2. clean data and organize it into an easy to work with form
@@ -250,6 +252,143 @@ Pdata_all <- Pdata_all %>% # Remove all Unknown plants
 glimpse(Pdata_all)
 
 
+#################
+### Seed data ###
+#################
+
+####### Barrel key and life-history combinations #######
+
+barrelkey <- read.csv("barrel_key.csv") |> 
+  mutate(
+    Trt = gsub("_[^_]+$", "", Trt),
+    LH_combo = case_when(
+      Trt %in% c("LE", "BE") ~ "FM",
+      Trt == "BL" ~ "FF",
+      Trt %in% c("AL", "BA") ~ "FS",
+      TRUE ~ NA_character_))
+
+lh_map <- list(
+  LE = c("LAGL", "ELEL"),
+  BE = c("BRTE", "ELEL"),
+  BL = c("BRTE", "LAGL"),
+  AL = c("ARTR", "LAGL"),
+  BA = c("BRTE", "ARTR"))
+
+barrelkey_expanded <- barrelkey |> 
+  rowwise() |> 
+  mutate(SPECIES = list(lh_map[[Trt]])) |> 
+  ungroup() |> 
+  tidyr::unnest(SPECIES) |> 
+  mutate(
+    BARREL = as.integer(BARREL),
+    SPECIES = as.factor(SPECIES),
+    LH_combo = as.factor(LH_combo))
+
+
+####### 2022 #######
+
+SDdata_22 <- barrelkey_expanded |> 
+  mutate(Total_seeds = case_when(
+      SPECIES == "ELEL" ~ 105,
+      SPECIES == "LAGL" ~ 130,
+      SPECIES == "ARTR" ~ 230,
+      SPECIES == "BRTE" ~ 130,
+      TRUE ~ NA_real_))
+
+
+####### 2023 #######
+
+SDdata_23_calc <- Pdata23_clean |> 
+  select(BARREL, SPECIES, FLWR_FINAL) |> 
+  mutate(
+    Seed_tot = case_when(
+      SPECIES == "LAGL" ~ FLWR_FINAL * 39,
+      SPECIES == "ELEL" ~ FLWR_FINAL * 93,
+      SPECIES == "BRTE" ~ FLWR_FINAL * 88,
+      TRUE ~ 0)) |> 
+  group_by(BARREL, SPECIES) |> 
+  summarise(
+    Total_seeds = sum(Seed_tot, na.rm = TRUE),
+    .groups = "drop")
+
+SDdata_23 <- barrelkey_expanded |> 
+  left_join(SDdata_23_calc, by = c("BARREL", "SPECIES")) |> 
+  mutate(Total_seeds = tidyr::replace_na(Total_seeds, 0))
+
+
+####### 2024 #######
+
+SDdata_24 <- readxl::read_xlsx(
+  "2024 Data_Clean.xlsx",
+  sheet = "seed count total") |> 
+  select(
+    `Barrel ID`, `BRTE Seeds`, `LAGL Seeds`,
+    `ELEL Seeds`, `ARTR Seeds`) |> 
+  rename(
+    BARREL = `Barrel ID`,
+    BRTE = `BRTE Seeds`,
+    LAGL = `LAGL Seeds`,
+    ELEL = `ELEL Seeds`,
+    ARTR = `ARTR Seeds`
+  ) |> 
+  mutate(BARREL = as.integer(BARREL)) |> 
+  filter(!is.na(BARREL)) |> 
+  pivot_longer(
+    cols = c(BRTE, LAGL, ELEL, ARTR),
+    names_to = "SPECIES",
+    values_to = "Total_seeds"
+  ) |> 
+  left_join(barrelkey_expanded, by = c("BARREL", "SPECIES")) |> 
+  filter(!is.na(LH_combo))
+
+
+####### 2025 #######
+
+SDdata_25 <- readxl::read_xlsx(
+  "2025 Data.xlsx",
+  sheet = "Total Seeds Barrel") |> 
+  select(`Barrel ID`, BRTE, LAGL, ELEL, ARTR) |> 
+  rename(BARREL = `Barrel ID`) |> 
+  pivot_longer(
+    cols = c(BRTE, LAGL, ELEL, ARTR),
+    names_to = "SPECIES",
+    values_to = "Total_seeds") |> 
+  left_join(barrelkey_expanded, by = c("BARREL", "SPECIES")) |> 
+  filter(!is.na(LH_combo))
+
+
+####### Combine seed data across years #######
+
+SD_all <- bind_rows(
+  SDdata_22 |> mutate(Year = 2022),
+  SDdata_23 |> mutate(Year = 2023),
+  SDdata_24 |> mutate(Year = 2024),
+  SDdata_25 |> mutate(Year = 2025)) |> 
+  arrange(BARREL, SPECIES, Year)
+
+
+####### Check seed data #######
+
+# Number of rows and unique barrels by year
+SD_all |> 
+  group_by(Year) |> 
+  summarise(
+    n_rows = n(),
+    n_barrels = n_distinct(BARREL),
+    n_missing_seeds = sum(is.na(Total_seeds)),
+    .groups = "drop")
+
+# Check species and treatment combinations
+SD_all |> 
+  count(Year, SPECIES, LH_combo)
+
+# Check for duplicate barrel-species-year combinations
+SD_all |> 
+  count(BARREL, SPECIES, Year) |> 
+  filter(n > 1)
+
+
+
 #############
 ### GLMM  ###
 #############
@@ -331,183 +470,508 @@ barrel <- count_df_mod$BARREL
 counts <- count_df_mod$Count
 plot(barrel, counts, type = "h")
 hist(counts)
-# so negative binomial or poisson
 
 
+###############
+### Make the response variable a proportion of plants that germinated and survived to reproduce ### 
+###############
+SD_all
+count_df_mod_1 <- count_df_mod 
+count_df_mod_1 <- count_df_mod |> mutate(Init_seeds = case_when(Year == 2023 &
+  Species == "ELEL" ~ 105,
+  Year == 2023 & Species == "LAGL" ~ 130,
+  Year == 2023 & Species == "ARTR" ~ 230,
+  Year == 2023 & Species == "BRTE" ~ 130,
+  TRUE ~ NA_real_))
 
 
-###### Do this in brms first, because we are going to test several models
+SD_all <- SD_all |> mutate(Year = as.factor(Year))
+glimpse(SD_all)
+count_df_mod_1 <- count_df_mod 
+count_df_mod_1 <- count_df_mod_1 |> 
+  left_join(
+    SD_all |> 
+      select(BARREL, Year, SPECIES, Total_seeds),
+    by = c("BARREL", "Year", "Species" = "SPECIES")
+  ) |> 
+  rename(Seeds = Total_seeds)
+
+glimpse(count_df_mod_1)
+
+####### Add seed production to count data #######
+
+count_df_mod_1 <- SD_all |> 
+  select(BARREL, Trt, LH_combo, SPECIES, Year, Seeds = Total_seeds) |> 
+  left_join(count_df_mod |> 
+      select(BARREL, Year, Species, Count, Treatment, Seeded, LH, LH_2),
+    by = c(
+      "BARREL",
+      "Year",
+      "SPECIES" = "Species")) |> 
+  mutate(Count = replace_na(Count, 0)) |> 
+  select(
+    BARREL, Year, SPECIES, LH, Count,
+    Treatment, Seeded, LH_2, Seeds, Trt, LH_combo) |> 
+  arrange(BARREL, SPECIES, Year)
+
+count_df_mod_2 <- count_df_mod_1 |> 
+  mutate(Year = as.integer(as.character(Year))) |> 
+  group_by(BARREL, SPECIES) |> 
+  arrange(Year, .by_group = TRUE) |> 
+  mutate(
+    Previous_seeds = lag(Seeds),
+    Seed_growth = Seeds  / Previous_seeds,
+    Seed_growth_log = log(Seeds / lag(Seeds))
+  ) |> 
+  ungroup()
+
+glimpse(count_df_mod_2)
+#########################
+##### New model time  ###
+#########################
+###############
+### Make the response variable seed growth (log change in seeds from year to year) ### 
+###############
+
+SD_all <- SD_all |> mutate(Year = as.factor(Year))
+glimpse(SD_all)
+
+####### Add seed production to count data #######
+
+count_df_mod_1 <- SD_all |> 
+  select(BARREL, Trt, LH_combo, SPECIES, Year, Seeds = Total_seeds) |> 
+  left_join(count_df_mod |> 
+              select(BARREL, Year, Species, Count, Treatment, Seeded, LH, LH_2),
+            by = c(
+              "BARREL",
+              "Year",
+              "SPECIES" = "Species")) |> 
+  mutate(Count = replace_na(Count, 0)) |> 
+  select(
+    BARREL, Year, SPECIES, LH, Count,
+    Treatment, Seeded, LH_2, Seeds, Trt, LH_combo) |> 
+  arrange(BARREL, SPECIES, Year)
+
+### check that every row in count_df_mod found a match in SD_all (should be 0 rows)
+count_df_mod |> anti_join(SD_all, by = c("BARREL", "Year", "Species" = "SPECIES"))
+
+count_df_mod_2 <- count_df_mod_1 |> 
+  mutate(Year = as.integer(as.character(Year))) |> 
+  group_by(BARREL, SPECIES) |> 
+  arrange(Year, .by_group = TRUE) |> 
+  mutate(Previous_seeds = lag(Seeds)) |> 
+  ungroup()
+
+glimpse(count_df_mod_2)
+
+#########################
+##### New model time  ###
+#########################
+
+### fill BEFORE dropping 2022, because 2022 is needed for the lag
+count_df_growth <- count_df_mod_2 |>
+  group_by(SPECIES) |>
+  fill(LH, LH_2, .direction = "downup") |>
+  ungroup() |>
+  group_by(BARREL) |>
+  fill(Treatment, Seeded, Trt, LH_combo, .direction = "downup") |>
+  ungroup()
+
+### add the reseeded seeds for the Repeated treatment (BRTE is never reseeded)
+### 2022 is the initial seeding and is already in Seeds, so nothing is added in 2022
+### Added_seeds in year t is sown after year t's seed production, so it joins the pool going into t + 1
+count_df_growth <- count_df_growth |> 
+  mutate(
+    Added_seeds = case_when(
+      Year > 2022 & Treatment == "Repeated" & SPECIES == "ELEL" ~ 105,
+      Year > 2022 & Treatment == "Repeated" & SPECIES == "LAGL" ~ 130,
+      Year > 2022 & Treatment == "Repeated" & SPECIES == "ARTR" ~ 230,
+      TRUE ~ 0),
+    Available_seeds = Seeds + Added_seeds) |> 
+  group_by(BARREL, SPECIES) |> 
+  arrange(Year, .by_group = TRUE) |> 
+  mutate(
+    Previous_available = lag(Available_seeds),
+    ### numerator is ONLY this year's production, denominator is last year's available pool
+    Seed_growth_log = log((Seeds + 1) / (Previous_available + 1))) |> 
+  ungroup() |> 
+  filter(Year > 2022) |> 
+  mutate(Year = as.factor(Year))
+
+### check for NAs
+count_df_growth |> summarise(
+  across(c(Seed_growth_log, Added_seeds, LH, Treatment, Year, BARREL),
+         ~ sum(is.na(.x))))
 
 
-mod_simp <- brms::brm(Count ~ LH + (1 | BARREL), 
-                   data = count_df_mod, 
-                   family = poisson(), # I think negative binomial will be better bc it allows the variance to be greater then the mean
-                   iter = 4000, warmup = 1500, chains = 3)
+### sanity checks
+count_df_growth |> count(Treatment, Seeded, SPECIES, Added_seeds)
+count_df_growth |> filter(Previous_available == 0) |> count(Treatment, SPECIES)
 
+####### Seed population growth model #######
 
-summary(mod_simp)
-plot(mod_simp)
-pp_check(mod_simp, ndraws = 100)
+# take a look at the data first
 
-
-mod_1 <- brms::brm(Count ~ LH + (1 + LH | BARREL), 
-          data = count_df_mod, 
-          family = negbinomial(),
-          iter = 4000, warmup = 1500, chains = 3)
-
-summary(mod_1)
-plot(mod_1)
-pp_check(mod_1, ndraws = 100) # a little high on the posterior but the shape matches. 
-
-
-### Try a Negative Binomial
-mod_2 <- brms::brm(Count ~ LH + (1 + LH | BARREL), 
-                   data = count_df_mod, 
-                   family = negbinomial(),
-                   iter = 4000, warmup = 1500, chains = 3)
-
-summary(mod_2)
-plot(mod_2)
-pp_check(mod_2, ndraws = 10)
-
-
-### model with year RE
-mod_3 <- brms::brm(Count ~ LH_2 * Treatment + (1 | Year), 
-                   data = count_df_mod, 
-                   family = negbinomial(),
-                   iter = 4000, warmup = 1000, chains = 3, cores = 4)
-
-summary(mod_3)
-plot(mod_3)
-pp_check(mod_3, ndraws = 10)
-
-summary(mod_3)$fixed[, 5:7]
-
-# quick and dirty plot on the original scale
-plot(conditional_effects(mod_3), ask = FALSE)
-
-posterior_3 <- as.matrix(mod_3)
-
-mcmc_areas(posterior_3,
-           pars = c("b_TreatmentRepeated", "b_LH_2FAST_N:TreatmentRepeated", "b_LH_2MEDIUM:TreatmentRepeated"),
-           # arbitrary threshold for shading probability mass
-           prob = 0.9) 
-
-########
-# Want to graph the posteriors of the predictors 
-library(tidybayes)
-post_data <- count_df_mod %>% 
-  expand_grid(LH_2, Treatment) %>%
-  add_fitted_draws(mod_3, n = 9000, re_formula = NA)
-
-
-
-
-
-
-data_grid
-### most complex model
-# how does abundance vary with LH and treatment 
-#   allowing for abundance to vary among barrels and change differently over years
-mod_4 <- brms::brm(Count ~ LH * Treatment + (1 + Year | BARREL), 
-                   data = count_df_mod, 
-                   family = negbinomial(),
-                   iter = 4000, warmup = 1500, chains = 3)
-
-summary(mod_4)
-plot(mod_4)
-pp_check(mod_4, ndraws = 10)
-
-# make_stancode(Count ~ LH * Treatment + (1 + Year | BARREL), 
-#               data = count_df_mod, 
-#               family = negbinomial(),
-#               iter = 4000, warmup = 1500, chains = 3)
-summary(mod_4)$fixed
-
-fixef(mod_4)
-fixef(mod_4)[, "Estimate"]
-mod_4_post <-  as.matrix(mod_4)
-
-ranef(mod_4)
-
-head(mod_4_post)
-
-draws <- as_draws_df(mod_4)
-names(draws)
-draws$b_LHSLOW
-
-
-pars_4 <- as_draws_df(mod_4)
-
-# Create prediction dataset
-newdat <- expand.grid(BARREL = unique(count_df_mod$BARREL),
-                      LH = unique(count_df_mod$LH),
-  Treatment = c("Single", "Repeated"), Year = unique(count_df_mod$Year))
-
-# Posterior predictions
-pred_4 <- posterior_epred(mod_4, newdata = newdat, re_formula = NULL)
-
-# Calculate posterior mean and 95% credible interval
-pred_df <- newdat %>%
-  mutate(Estimate = colMeans(pred_4),
-    Lower = apply(pred_4, 2, quantile, probs = 0.025),
-    Upper = apply(pred_4, 2, quantile, probs = 0.975))
-
-
-
-ggplot(pred_df, aes(x = BARREL, y = Estimate, 
-                    group = LH, color = LH)) +
-  geom_line() +
-  geom_point() +
-  labs(
-    x = "Barrel",
-    y = "Predicted abundance",
-    color = "Life history") +
-  theme_classic()
-
-
-# mcmc_areas(mod_4_post,
-#            pars = c("b_Intercept", 
-#                     "b_LHMEDIUM", "b_LHSLOW", 
-#                     "b_TreatmentRepeated", "b_LHMEDIUM:TreatmentRepeated", "b_LHSLOW:TreatmentRepeated"),
-#            # arbitrary threshold for shading probability mass
-#            prob = 0.83) 
-# 
-# mcmc_areas(mod_4_post,
-#            pars = c("b_TreatmentRepeated", "b_LHMEDIUM:TreatmentRepeated"),
-#            # arbitrary threshold for shading probability mass
-#            prob = 0.83) 
-
-# we are curious about the effect of LH and seeding treatment on plant counts
-# do this in Stan?
-
-#start easy, then work up in complexity
-
-# modeldata <- list(C = count_df_mod$Count,
-#                   Yr = count_df_mod$Count,
-#                   )
-# 
-# # Run the model
-# BRTE_fitness_mod <- stan(file = "Barrel_glmm.stan",
-#                          data = modeldata, 
-#                          chains = 3,iter = 2000, warmup = 1000)
-#   
-
-
+hist(count_df_growth$Seed_growth, breaks = 20)
+hist(count_df_growth$Seed_growth_log, breaks = 20)
 
 
 ##############
-### Once models are finshed  
+### Once models are finished  
 # plot posteriors 
 # show effect sizes
+#####################################
+###
+count_df_growth
+glimpse(count_df_growth) # species needs to be factor, LH_2 also needs to be a factor
+
+count_df_growth <- count_df_growth %>% 
+  mutate(SPECIES = as.factor(SPECIES), 
+         LH_2 = as.factor(LH_2))
+
+# Model 1
+mod_seed_1 <- brms::brm(
+  Seed_growth_log ~ LH + Treatment + (1 | BARREL),
+  data = count_df_growth,
+  family = gaussian(),
+  iter = 4000,
+  warmup = 1500,
+  chains = 3)
+
+
+mod_seed_2 <- brms::brm(
+  Seed_growth_log ~ LH + Treatment + Year + (1 | BARREL),
+  data = count_df_growth,
+  family = gaussian(),
+  iter = 4000,
+  warmup = 1500,
+  chains = 3)
+
+mod_seed_3 <- brms::brm( 
+  Seed_growth_log ~ LH * Treatment + Year + (1 | BARREL),
+  data = count_df_growth,
+  family = gaussian(),
+  iter = 4000,
+  warmup = 1500,
+  chains = 3, 
+  control = list(max_treedepth = 12))
+
+fixef(mod_seed_3)[grep("LH.*Treatment|Treatment.*LH", 
+                         rownames(fixef(mod_seed_3))), ]
+plot(mod_seed_4,
+     pars = "^b_",
+     prob = 0.95)
+
+# mod_seed_4 <- brms::brm( ### this one has RHAt of 2.66... BAD
+#   Seed_growth_log ~ LH * Treatment + Year + SPECIES + Treatment * SPECIES + (1 | BARREL),
+#   data = count_df_growth,
+#   family = gaussian(),
+#   iter = 4000,
+#   warmup = 1500,
+#   chains = 3)
+
+
+###   Well if adding Species is causing problems... Let's code LH_2
+mod_seed_4 <- brms::brm( 
+  Seed_growth_log ~ LH_2 * Treatment + Year + (1 | BARREL),
+  data = count_df_growth,
+  family = gaussian(),
+  iter = 4000,
+  warmup = 1500,
+  chains = 3)
+
+mod_seed_5 <- brms::brm( 
+  Seed_growth_log ~ LH_2 * Treatment + LH_2 * Year + (1 | BARREL),
+  data = count_df_growth,
+  family = gaussian(),
+  iter = 4000,
+  warmup = 1500,
+  chains = 3)
+
+
+#mod_seed_4 <- add_criterion(mod_seed_4, criterion = "")
+summary(mod_seed_1)
+summary(mod_seed_2)
+summary(mod_seed_3)
+summary(mod_seed_4)
+pp_check(mod_seed_3, ndraws = 100)
+pp_check(mod_seed_3, type = "stat_grouped", stat = "median", group = "LH")
+
+
+loo_compare(loo(mod_seed_1), loo(mod_seed_2), loo(mod_seed_3), loo(mod_seed_4), loo(mod_seed_5))
+## Move forward with models 3 & 4
+
+
+##########################################################
+params_3 <- as_tibble(as.data.frame(mod_seed_3))
+n_iter <- nrow(params_3)
+names(params_3)[grepl("^b_", names(params_3))]   # check the coefficient names
+
+# remember all are in reference to FAST_SINGLE_2023
+name_map <- c(
+  FAST_Single_2023        = "b_Intercept",
+  MEDIUM          = "b_LHMEDIUM",
+  SLOW            = "b_LHSLOW",
+  Repeated_FAST = "b_TreatmentRepeated",
+  MEDIUM_Repeated   = "b_LHMEDIUM:TreatmentRepeated",
+  SLOW_Repeated     = "b_LHSLOW:TreatmentRepeated",
+  Year2024        = "b_Year2024",
+  Year2025        = "b_Year2025",
+  sd_barrel               = "sd_BARREL__Intercept"
+)
+
+params_3 <- params_3 |> rename(all_of(name_map))
+
+params_3 <- params_3 %>% 
+  relocate(MEDIUM_Repeated, SLOW_Repeated, .after = Repeated_FAST,  )
+glimpse(params_3)
+
+# # Median and 95% interval of a set of draws
+# summ <- function(x) {
+#   c(median = median(x),
+#     lower  = unname(quantile(x, 0.025)),
+#     upper  = unname(quantile(x, 0.975)))
+# }
+
+
+params_3 %>% 
+  select(1:3) %>% 
+  pivot_longer(everything(), names_to = "parameter", values_to = "value") %>% 
+  ggplot(aes(x = value, fill = parameter)) +
+  geom_density(alpha = 0.5) + 
+  geom_vline(xintercept = 0)
+  facet_wrap(~ parameter, scales = "free")
+
+params_3 %>% 
+  select(4:6) %>% 
+  pivot_longer(everything(), names_to = "parameter", values_to = "value") %>% 
+  ggplot(aes(x = value, fill = parameter)) +
+  geom_density(alpha = 0.5) + 
+  facet_wrap(~ parameter, scales = "free")
+
+# Repeated vs Single effect within each life history.
+# Because of the interaction, Repeated_FAST is the effect for FAST only;
+# MEDIUM and SLOW add their interaction terms to it.
+repeated <- params_3 |>
+  transmute(FAST   = Repeated_FAST,
+            MEDIUM = Repeated_FAST + MEDIUM_Repeated,
+            SLOW   = Repeated_FAST + SLOW_Repeated) |>
+  pivot_longer(everything(), names_to = "LH", values_to = "effect") |>
+  mutate(LH = factor(LH, levels = c("FAST", "MEDIUM", "SLOW")))
+
+# Density plot (log scale on the bottom, growth ratio on the top axis)
+ggplot(repeated, aes(x = effect, fill = LH)) +
+  geom_density(alpha = 0.5) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  scale_x_continuous(sec.axis = sec_axis(~ exp(.), name = "Growth ratio (Repeated / Single)")) +
+  labs(x = "Repeated - Single (Seed_growth_log)", y = "Posterior density", fill = NULL) +
+  theme_classic()+
+  geom_vline(xintercept = 0, colour = "black", linewidth = 1) 
+
+# Numbers behind the plot
+repeated |>
+  group_by(LH) |>
+  summarise(median    = median(effect),
+            lower95   = quantile(effect, 0.025),
+            upper95   = quantile(effect, 0.975),
+            p_above_0 = mean(effect > 0),
+            ratio     = exp(median(effect)),
+            ratio_lower = exp(quantile(effect, 0.025)),
+            ratio_upper = exp(quantile(effect, 0.975)))
 
 
 
 
+### Model 4 output & visualization
+params_4 <- as_tibble(as.data.frame(mod_seed_4))
+
+
+names(params_4)[grepl("^b_", names(params_4))]   # check the coefficient names
+# name_map_4 <- c(
+#   FAST_BRTE_Single_2023        = "b_Intercept",
+#   FAST_LAGL        = "b_LH_2FAST_N",
+#   MEDIUM          = "b_LH_2MEDIUM",
+#   SLOW            = "b_LH_2SLOW",
+#   FAST_BRTE_REP = "b_TreatmentRepeated",
+#   FAST_LAGL_Repeated = "b_LH_2FAST_N:TreatmentRepeated",
+#   MEDIUM_Repeated   = "b_LH_2MEDIUM:TreatmentRepeated",
+#   SLOW_Repeated     = "b_LH_2SLOW:TreatmentRepeated",
+#   Year2024        = "b_Year2024",
+#   Year2025        = "b_Year2025",
+#   sd_barrel               = "sd_BARREL__Intercept"
+# )
+
+par_names_4 <- c(BRTE = "b_Intercept",
+                 LAGL = "b_LH_2FAST_N",
+                 ELEL = "b_LH_2MEDIUM",              
+                 ARTR = "b_LH_2SLOW",
+                 REP = "b_TreatmentRepeated",
+                 YR_2024 = "b_Year2024",     
+                 YR_2025 = "b_Year2025",
+  LAGL_REP = "b_LH_2FAST_N:TreatmentRepeated",
+  ELEL_REP ="b_LH_2MEDIUM:TreatmentRepeated", 
+  ARTR_REP = "b_LH_2SLOW:TreatmentRepeated")
+
+
+params_4 <- params_4 |> rename(all_of(par_names_4))
+
+params_4 <- params_4 %>% 
+  relocate(MEDIUM_Repeated, SLOW_Repeated, .after = Repeated_FAST  )
+glimpse(params_4)
+
+
+params_4 %>% 
+  select(1:4) %>% 
+  pivot_longer(everything(), names_to = "parameter", values_to = "value") %>% 
+  ggplot(aes(x = value, fill = parameter)) +
+  geom_density(alpha = 0.5) + facet_wrap(~ parameter, scales = "free")
+
+params_4 %>% 
+  select(1:4) %>% 
+  pivot_longer(everything(), names_to = "parameter", values_to = "value") %>% 
+  ggplot(aes(x = value, fill = parameter)) +
+  geom_density(alpha = 0.5) + 
+  facet_wrap(~ parameter, scales = "free")
+
+
+params_4 %>% 
+  select(REP) %>% 
+  pivot_longer(everything(), names_to = "parameter", values_to = "value") %>% 
+  ggplot(aes(x = value, fill = parameter)) +
+  geom_density(alpha = 0.5) + 
+  geom_vline(xintercept = 0)+
+  facet_wrap(~ parameter, scales = "free")
+
+
+params_4 %>% 
+    select(YR_2024, YR_2025) %>% 
+    pivot_longer(everything(), names_to = "parameter", values_to = "value") %>% 
+    ggplot(aes(x = value, fill = parameter)) +
+    geom_density(alpha = 0.5) + 
+    geom_vline(xintercept = 0)
+
+  
+###################################
+###  MODEL 5 ### 
+# Look at year * species effect
+
+params_5 <- as_tibble(as.data.frame(mod_seed_5))
+
+
+names(params_5)[grepl("^b_", names(params_5))]   # check the coefficient names
+# name_map_4 <- c(
+#   FAST_BRTE_Single_2023        = "b_Intercept",
+#   FAST_LAGL        = "b_LH_2FAST_N",
+#   MEDIUM          = "b_LH_2MEDIUM",
+#   SLOW            = "b_LH_2SLOW",
+#   FAST_BRTE_REP = "b_TreatmentRepeated",
+#   FAST_LAGL_Repeated = "b_LH_2FAST_N:TreatmentRepeated",
+#   MEDIUM_Repeated   = "b_LH_2MEDIUM:TreatmentRepeated",
+#   SLOW_Repeated     = "b_LH_2SLOW:TreatmentRepeated",
+#   Year2024        = "b_Year2024",
+#   Year2025        = "b_Year2025",
+#   sd_barrel               = "sd_BARREL__Intercept"
+# )
+
+par_names_5 <- c(BRTE_S_2023 = "b_Intercept",
+                 LAGL_ = "b_LH_2FAST_N",
+                 ELEL = "b_LH_2MEDIUM",              
+                 ARTR = "b_LH_2SLOW",
+                 REP = "b_TreatmentRepeated",
+                 YR_2024 = "b_Year2024",     
+                 YR_2025 = "b_Year2025",
+                 LAGL_REP = "b_LH_2FAST_N:TreatmentRepeated",
+                 ELEL_REP ="b_LH_2MEDIUM:TreatmentRepeated", 
+                 ARTR_REP = "b_LH_2SLOW:TreatmentRepeated")
+
+
+params_5 <- params_5 |> rename(all_of(par_names_5))
+
+### nicer panel titles (mapping taken from your par_names_4: FAST_I = BRTE, FAST_N = LAGL, etc.)
+lh_labels <- c(
+  FAST_I = "BRTE (FAST_I)",
+  FAST_N = "LAGL (FAST_N)",
+  MEDIUM = "ELEL (MEDIUM)",
+  SLOW   = "ARTR (SLOW)")
+
+### only LH_2 x Treatment x Year combos that exist in the data
+newdat <- count_df_growth |> 
+  distinct(LH_2, Treatment, Year)
+
+### posterior expected values; re_formula = NA is the "average barrel"
+post_draws <- newdat |> 
+  add_epred_draws(mod_seed_5, re_formula = NA)
+
+dodge <- position_dodge(width = 0.6)
+
+p_lh_year <- ggplot(post_draws, aes(x = Year, y = .epred, colour = Treatment, group = Treatment)) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +
+  ### raw barrel-level data in the background
+  geom_point(
+    data = count_df_growth,
+    aes(y = Seed_growth_log),
+    position = position_jitterdodge(jitter.width = 0.1, dodge.width = 0.4),
+    alpha = 0.2, size = 1) +
+  ### posterior mean connected across years
+  stat_summary(fun = mean, geom = "line", position = dodge) +
+  ### 66% and 95% credible intervals
+  stat_pointinterval(.width = c(0.66, 0.95), position = dodge) +
+  facet_wrap(~ LH_2, nrow = 2, labeller = as_labeller(lh_labels)) +
+  labs(
+    x = "Year",
+    y = "Seed growth (log change in seeds)",
+    colour = "Treatment",
+    title = "Seed growth by life history, treatment and year",
+    subtitle = "Posterior mean with 66% and 95% credible intervals. Faint dots: raw barrels") +
+  theme_bw()
+
+p_lh_year
+
+p_dens <- post_draws |> 
+  ungroup() |> 
+  ggplot(aes(x = .epred, fill = Year, colour = Year, linetype = Treatment)) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = "grey50") +
+  geom_density(alpha = 0.25, linewidth = 0.6) +
+  facet_wrap(~ LH_2, nrow = 2, labeller = as_labeller(lh_labels), scales = "free") +
+  labs(
+    x = "",
+    y = "") +
+  theme_bw()
+
+p_dens
 
 
 
+########################################
+### Models of ABUNDANCE ###
+########################################
+count_df_growth
 
+count_mod_1 <- brms::brm( 
+  Count ~ LH * Treatment + Year + (1 | BARREL),
+  data = count_df_growth,
+  family = negbinomial(),
+  iter = 5000,
+  warmup = 3000,
+  chains = 3, 
+  control = list(max_treedepth = 12))
 
+count_mod_2 <- brms::brm( 
+  Count ~ LH_2 * Treatment + Year + (1 | BARREL),
+  data = count_df_growth,
+  family = negbinomial(),
+  iter = 5000,
+  warmup = 300,
+  chains = 3, 
+  control = list(max_treedepth = 12))
+
+count_mod_3 <- brms::brm( 
+  Count ~ LH_2 * Treatment + LH_2 * Year + (1 | BARREL),
+  data = count_df_growth,
+  family = negbinomial(),
+  iter = 5000,
+  warmup = 3000,
+  chains = 3, 
+  control = list(max_treedepth = 12))
 
 
