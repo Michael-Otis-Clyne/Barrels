@@ -629,6 +629,9 @@ count_df_growth <- count_df_growth %>%
   mutate(SPECIES = as.factor(SPECIES), 
          LH_2 = as.factor(LH_2))
 
+
+options(mc.cores = parallel::detectCores())
+
 # Model 1
 mod_seed_1 <- brms::brm(
   Seed_growth_log ~ LH + Treatment + (1 | BARREL),
@@ -974,4 +977,71 @@ count_mod_3 <- brms::brm(
   chains = 3, 
   control = list(max_treedepth = 12))
 
+########################################
+### Models of FITNESS ###
+########################################
+
+### Fitness = plants that germinated and survived (Count) / seeds available going into that year
+### NA where the pool was 0, because Count / 0 is Inf or NaN
+count_df_fitness <- count_df_growth |> 
+  mutate(
+    Fitness = if_else(Previous_available > 0, Count / Previous_available, 0))
+
+### checks
+count_df_fitness |> summarise(
+  n_rows   = n(),
+  n_NA     = sum(is.na(Fitness)),
+  n_over_1 = sum(Fitness > 1, na.rm = TRUE), # should be 0
+  max_fit  = max(Fitness, na.rm = TRUE), 
+  min_fit = min(Fitness, na.rm= T))
+
+### which rows lost their Fitness value, and did they have plants anyway?
+count_df_fitness |> 
+  filter(is.na(Fitness)) |> 
+  count(Treatment, SPECIES, Plants_present = Count > 0)
+
+### rows to model
+count_df_fitness <- count_df_fitness |> 
+  filter(!is.na(Fitness))
+
+#check the distribution of the fitness metric
+hist(count_df_fitness$Fitness, breaks = 40)
+
+ggplot(data = count_df_fitness,
+       mapping = aes(x = Fitness)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 40,
+                 fill = "grey80", colour = "white") +
+  geom_density(fill = "steelblue", colour = "steelblue4",
+               alpha = 0.25, linewidth = 0.8) +
+  labs(x = NULL, y = NULL) +
+  theme_classic()
+## So it looks like maybe a Beta, Gamma, or Binomial distrubution might work. 
+# Hobbs and Hooten suggest Beta in the book... Let's try that first
+library(parallel)
+
+n_cores <- parallel::detectCores()   # logical cores on your machine
+n_cores
+
+
+fit_mod_1 <- brms::brm(
+  Fitness ~ LH_2 * Treatment + LH_2 * Year + (1 | BARREL),
+  data = count_df_fitness,
+  family = zero_inflated_beta(), # have to use zero-inflated here
+  iter = 5000,
+  warmup = 3000,
+  chains = 3, 
+  control = list(max_treedepth = 12))
+
+
+#### different model
+fit_mod_2 <- brms::brm(
+  bf(Fitness ~ LH_2 * Treatment + LH_2 * Year + (1 | BARREL),
+     zi ~ LH_2 + Treatment),
+  data = count_df_fitness,
+  family = zero_inflated_beta(),
+  iter = 5000,
+  warmup = 3000,
+  chains = 4,                 # one chain per core is the usual setup
+  cores = min(4, n_cores),    # cores can't usefully exceed chains
+  control = list(max_treedepth = 12))
 
