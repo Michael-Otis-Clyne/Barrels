@@ -150,7 +150,8 @@ count_mod_3 <- brms::brm(
   iter = 5000,
   warmup = 3000,
   chains = 3, 
-  control = list(max_treedepth = 12),
+  control = list(max_treedepth = 12, moment_match = T),
+  #moment_match = T, 
   file = "models/count_mod_3")
 
 check_fits(list(count_mod_1 = count_mod_1, count_mod_2 = count_mod_2, count_mod_3 = count_mod_3))
@@ -168,17 +169,14 @@ loo_compare(count_mod_1, count_mod_2, count_mod_3)
 ## Fitness = Count / seeds available going into that year.
 ## Hobbs and Hooten suggest Beta... zero_inflated_beta handles the exact zeros.
 
-### zero_inflated_beta() needs every Fitness in [0, 1). This stops the script if not.
-count_df_fitness |> summarise(
-  n_rows = n(),
-  n_zero = sum(Fitness == 0),
-  n_ge_1 = sum(Fitness >= 1))
 
-stopifnot("Fitness has values >= 1: zero_inflated_beta() will fail. Fix in 01_data_prep.R or use beta_binomial()" =
-            all(count_df_fitness$Fitness < 1))
+
+
+
+
 
 fit_mod_1 <- brms::brm(
-  Fitness ~ LH_2 * Treatment + LH_2 * Year + (1 | BARREL),
+  Fitness ~ LH * Treatment + Treatment * Year + (1 | BARREL),
   data = count_df_fitness,
   family = zero_inflated_beta(),
   iter = 5000,
@@ -187,26 +185,117 @@ fit_mod_1 <- brms::brm(
   control = list(max_treedepth = 12),
   file = "models/fit_mod_1")
 
-#### zero-inflation part also depends on LH_2 and Treatment
 fit_mod_2 <- brms::brm(
-  bf(Fitness ~ LH_2 * Treatment + LH_2 * Year + (1 | BARREL),
-     zi ~ LH_2 + Treatment),
+  Fitness ~ LH_2 * Treatment + Treatment * Year + (1 | BARREL),
   data = count_df_fitness,
   family = zero_inflated_beta(),
   iter = 5000,
   warmup = 3000,
-  chains = 4,                 # one chain per core is the usual setup
-  cores = min(4, n_cores),    # cores can't usefully exceed chains
+  chains = 3, 
   control = list(max_treedepth = 12),
   file = "models/fit_mod_2")
+
+
+fit_mod_3 <- brms::brm(
+     Fitness ~ LH_2 + Treatment + Year + (1 | BARREL),
+     data = count_df_fitness,
+     family = zero_inflated_beta(),
+     iter = 5000,
+     warmup = 3000,
+     chains = 3, 
+     control = list(max_treedepth = 12),
+     file = "models/fit_mod_3")
+
+fit_mod_4 <- brms::brm(
+  Fitness ~ LH_2 * Treatment + Year + (1 | BARREL),
+  data = count_df_fitness,
+  family = zero_inflated_beta(),
+  iter = 5000,
+  warmup = 3000,
+  chains = 3, 
+  control = list(max_treedepth = 12),
+  file = "models/fit_mod_4")
 
 check_fits(list(fit_mod_1 = fit_mod_1, fit_mod_2 = fit_mod_2))
 
 summary(fit_mod_1)
 summary(fit_mod_2)
-pp_check(fit_mod_2, ndraws = 100)
+summary(fit_mod_3)
+summary(fit_mod_4)
+pp_check(fit_mod_4, ndraws = 100)
 
 fit_mod_1 <- add_criterion(fit_mod_1, "loo", file = "models/fit_mod_1")
 fit_mod_2 <- add_criterion(fit_mod_2, "loo", file = "models/fit_mod_2")
+fit_mod_3 <- add_criterion(fit_mod_3, "loo", file = "models/fit_mod_3")
+fit_mod_4 <- add_criterion(fit_mod_4, "loo", file = "models/fit_mod_4")
 
-loo_compare(fit_mod_1, fit_mod_2)
+
+loo_compare(fit_mod_2, fit_mod_4)
+
+
+
+
+
+#####
+# Going to run a few models on log(counts + 1 / available seeds +1)
+#logfit_df <- count_df_fitness |> select(!c())
+
+mod_logfit_1 <- brms::brm(
+  log_fit ~ LH_2 * Treatment + Year + (1 | BARREL),
+  data = count_df_fitness,
+  family = gaussian(),
+  iter = 5000,
+  warmup = 3000,
+  chains = 3, 
+  control = list(max_treedepth = 12),
+  file = "models/mod_logfit_1")
+summary(mod_logfit_1)
+
+
+mod_logfit_2 <- brms::brm(
+  log_fit ~ LH_2 * Treatment + Treatment*Year + (1 | BARREL),
+  data = count_df_fitness,
+  family = gaussian(),
+  iter = 5000,
+  warmup = 3000,
+  chains = 3, 
+  control = list(max_treedepth = 12),
+  file = "models/mod_logfit_2")
+
+
+
+mod_logfit_3 <- brms::brm(
+  log_fit ~ LH * Treatment + Year + (1 | BARREL),
+  data = count_df_fitness,
+  family = gaussian(),
+  iter = 5000,
+  warmup = 3000,
+  chains = 3, 
+  control = list(max_treedepth = 12),
+  file = "models/mod_logfit_3")
+
+
+mod_logfit_4 <- brms::brm(
+  log_fit ~ LH * Treatment + Treatment*Year + (1 | BARREL),
+  data = count_df_fitness,
+  family = gaussian(),
+  iter = 5000,
+  warmup = 3000,
+  chains = 3, 
+  control = list(max_treedepth = 12),
+  file = "models/mod_logfit_4")
+
+
+
+
+
+summary(mod_logfit_2)
+
+
+mod_logfit_1 <- add_criterion(mod_logfit_1, "loo", file = "models/mod_logfit_1")
+mod_logfit_2 <- add_criterion(mod_logfit_2, "loo", file = "models/mod_logfit_2")
+mod_logfit_3 <- add_criterion(mod_logfit_3, "loo", file = "models/mod_logfit_3")
+mod_logfit_4 <- add_criterion(mod_logfit_4, "loo", file = "models/mod_logfit_4")
+loo_compare(mod_logfit_1, mod_logfit_1, mod_logfit_3, mod_logfit_4)
+
+

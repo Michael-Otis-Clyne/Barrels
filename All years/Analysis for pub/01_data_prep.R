@@ -526,6 +526,20 @@ count_df_fitness <- count_df_growth |>
   mutate(
     Fitness = if_else(Previous_available > 0, Count / Previous_available, 0))
 
+
+
+#### new idea
+# log(counts+1 / available seeds+1)
+count_df_fitness <- count_df_fitness |> 
+  mutate(
+    log_fit = log((Count +1 )/ (Previous_available +1))) |> 
+  drop_na(log_fit)
+
+hist(count_df_fitness$log_fit)
+
+
+
+
 ### checks
 count_df_fitness |> summarise(
   n_rows   = n(),

@@ -18,6 +18,544 @@ dir.create("figures", showWarnings = FALSE)
 count_df_growth  <- readRDS("data/count_df_growth.rds")
 count_df_fitness <- readRDS("data/count_df_fitness.rds")
 
+#############################################
+### ABUNDANCE: distribution of the response ###
+#############################################
+count_mod_1 <- readRDS("models/count_mod_1.rds")
+summary(count_mod_1)
+
+# Create prediction grid
+pred_grid <- expand_grid(
+  LH = levels(count_df_growth$LH),
+  Treatment = levels(count_df_growth$Treatment),
+  Year = levels(count_df_growth$Year))
+
+# Ensure factors have the same levels as the original data
+pred_grid <- pred_grid |> 
+  mutate(
+    LH = factor(LH, levels = levels(count_df_growth$LH)),
+    Treatment = factor(Treatment, levels = levels(count_df_growth$Treatment)),
+    Year = factor(Year, levels = levels(count_df_growth$Year)))
+
+# Generate posterior expected abundance
+pred_draws <- posterior_epred(
+  count_mod_1,
+  newdata = pred_grid,
+  re_formula = NA)
+
+summarize_predictions <- function(draws, grid, group_vars) {
+  
+  group_id <- grid |> 
+    group_by(across(all_of(group_vars))) |> 
+    group_indices()
+  
+  groups <- grid |> 
+    group_by(across(all_of(group_vars))) |> 
+    group_keys()
+  
+  pred_summary <- map_dfr(
+    seq_len(nrow(groups)),
+    function(i) {
+      
+      # Average predictions across combinations within each group
+      group_draws <- rowMeans(
+        draws[, group_id == i, drop = FALSE]
+      )
+      
+      tibble(
+        Estimate = mean(group_draws),
+        Est.Error = sd(group_draws),
+        Q2.5 = quantile(group_draws, 0.025),
+        Q97.5 = quantile(group_draws, 0.975)
+      )
+    }
+  )
+  
+  bind_cols(groups, pred_summary)
+}
+
+
+pred_LH <- summarize_predictions(
+  draws = pred_draws,
+  grid = pred_grid,
+  group_vars = "LH"
+)
+
+ggplot(pred_LH, aes(x = LH, y = Estimate)) +
+  geom_point(size = 3) +
+  geom_errorbar(
+    aes(ymin = Q2.5, ymax = Q97.5),
+    width = 0.15,
+    linewidth = 0.8
+  ) +
+  labs(
+    x = "Life-history strategy",
+    y = "Predicted abundance",
+    title = "Effect of life-history strategy on abundance"
+  ) +
+  theme_classic(base_size = 14)
+
+
+pred_treatment <- summarize_predictions(
+  draws = pred_draws,
+  grid = pred_grid,
+  group_vars = c("LH", "Treatment"))
+
+ggplot(
+  pred_treatment,
+  aes(
+    x = Treatment,
+    y = Estimate,
+    color = LH,
+    group = LH
+  )
+) +
+  geom_point(size = 3) +
+  geom_line(linewidth = 0.8) +
+  geom_errorbar(
+    aes(ymin = Q2.5, ymax = Q97.5),
+    width = 0.15,
+    linewidth = 0.8
+  ) +
+  labs(
+    x = "Treatment",
+    y = "Predicted abundance",
+    color = "Life history",
+    title = "Treatment effects on abundance"
+  ) +
+  theme_classic(base_size = 14)
+
+
+
+
+
+pred_interaction <- summarize_predictions(
+  draws = pred_draws,
+  grid = pred_grid,
+  group_vars = c("LH", "Treatment", "Year"))
+
+ggplot(
+  pred_interaction,
+  aes(
+    x = Treatment,
+    y = Estimate,
+    color = LH,
+    group = LH
+  )
+) +
+  geom_point(size = 3) +
+  geom_line(linewidth = 0.8) +
+  geom_errorbar(
+    aes(ymin = Q2.5, ymax = Q97.5),
+    width = 0.15,
+    linewidth = 0.8
+  ) +
+  facet_wrap(~ Year) +
+  labs(
+    y = "Predicted abundance",
+    color = "Life history") 
+
+######################
+###  Count mod 2  ###
+######################
+count_mod_2 <- readRDS("models/count_mod_2.rds")
+summary(count_mod_2)
+
+# Create prediction grid
+pred_grid_count_2 <- expand_grid(
+  LH_2 = levels(count_df_growth$LH_2),
+  Treatment = levels(count_df_growth$Treatment),
+  Year = levels(count_df_growth$Year))
+
+# Ensure factors have the same levels as the original data
+pred_grid_count_2 <- pred_grid_count_2 |> 
+  mutate(
+    LH_2 = factor(LH_2, levels = levels(count_df_growth$LH_2)),
+    Treatment = factor(Treatment, levels = levels(count_df_growth$Treatment)),
+    Year = factor(Year, levels = levels(count_df_growth$Year)))
+
+# Generate posterior expected abundance
+pred_draws_count_2 <- posterior_epred(
+  count_mod_2,
+  newdata = pred_grid_count_2,
+  re_formula = NA)
+
+pred_LH_count_2 <- summarize_predictions(
+  draws = pred_draws_count_2,
+  grid = pred_grid_count_2,
+  group_vars = "LH_2")
+
+pred_treatment_count_2 <- summarize_predictions(
+  draws = pred_draws_count_2,
+  grid = pred_grid_count_2,
+  group_vars = c("LH_2", "Treatment"))
+
+#### Show LH and abundance: 
+ggplot(pred_LH_count_2, aes(x = LH_2, y = Estimate)) +
+  geom_point(size = 3) +
+  geom_errorbar(
+    aes(ymin = Q2.5, ymax = Q97.5),
+    width = 0.15,
+    linewidth = 0.8) +
+  labs(x = "Life history", y = "Predicted abundance")
+
+
+### now show LH & treatment effect
+ggplot(pred_treatment_count_2|> filter(LH_2  !="FAST_I"), 
+       aes(x = Treatment, y = Estimate, 
+                                   color = LH_2, 
+                                   group = LH_2))+   
+  geom_point(width = 0.1,size = 3) +
+  geom_errorbar(aes(ymin = Q2.5, ymax = Q97.5),
+    width = 0.15, linewidth = 0.8)
+
+ggplot(pred_treatment_count_2 |> filter(LH_2  !="FAST_I"),
+       aes(x = Treatment, y = Estimate,
+    color = LH_2,
+    group = LH_2)) +
+  geom_point(size = 3) +
+  geom_line(linewidth = 0.8) +
+  geom_errorbar(
+    aes(ymin = Q2.5, ymax = Q97.5),
+    width = 0.15,
+    linewidth = 0.8
+  ) +
+  labs(
+    x = "Treatment",
+    y = "Predicted abundance",
+    color = "Life history",
+    title = "Treatment effects on abundance"
+  )
+
+
+pred_int_count_2 <- summarize_predictions(
+  draws = pred_draws_count_2,
+  grid = pred_grid_count_2,
+  group_vars = c("LH_2", "Treatment", "Year"))
+
+ggplot(pred_int_count_2|> filter(LH_2  !="FAST_I"), 
+       aes(
+    x = Treatment,
+    y = Estimate,
+    color = LH_2,
+    group = LH_2)) +
+  geom_point(size = 3) +
+  geom_line(linewidth = 0.8) +
+  geom_errorbar(
+    aes(ymin = Q2.5, ymax = Q97.5),
+    width = 0.15,
+    linewidth = 0.8
+  ) +
+  facet_wrap(~ Year) +
+  labs(
+    y = "Predicted abundance",
+    color = "Life history") 
+
+
+
+
+
+
+###################################################
+###  plots of posterior distributions
+###################################################
+## model form =   Count ~ LH_2 * Treatment + Year + (1 | BARREL),
+
+count_2_post <- as_tibble(as.data.frame(count_mod_2))
+names(count_2_post)
+
+# plot the species effect on abundcnace 
+count_2_post %>% 
+  select(1:4) %>% 
+  pivot_longer(everything(), names_to = "parameter", values_to = "value") %>% 
+  ggplot(aes(x = value, fill = parameter)) +
+  geom_density(alpha = 0.5) + 
+  facet_wrap(~ parameter, scales = "free")
+
+#### Take a look at the treatment effect by Species
+count_2_post %>% 
+  select(5,8:10) %>% 
+  pivot_longer(everything(), names_to = "parameter", values_to = "value") %>% 
+  ggplot(aes(x = value, fill = parameter)) +
+  geom_density(alpha = 0.5) + 
+  facet_wrap(~ parameter, scales = "free")
+
+
+count_2_fig <- count_2_post 
+
+
+names(count_2_post)[grepl("^b_", names(count_2_post))]   # get the coefficient names
+levels(count_df_growth$LH_2); levels(count_df_growth$Treatment); levels(count_df_growth$Year)
+
+par_names_c2 <- c(BRTE_S_2023 = "b_Intercept",
+                 LAGL       = "b_LH_2FAST_N",
+                 ELEL        = "b_LH_2MEDIUM",              
+                 ARTR        = "b_LH_2SLOW",
+                 REP         = "b_TreatmentRepeated",
+                 YR_2024     = "b_Year2024",     
+                 YR_2025     = "b_Year2025",
+                 FAST_REP    = "b_LH_2FAST_N:TreatmentRepeated",
+                 MED_REP    = "b_LH_2MEDIUM:TreatmentRepeated", 
+                 SLOW_REP    = "b_LH_2SLOW:TreatmentRepeated")
+
+count_2_fig <- count_2_fig |> rename(all_of(par_names_c2))
+
+
+#count_2_fig <- count_2_fig %>% pivot_longer(everything(), names_to = "parameter", values_to = "value")
+
+# Easier: estimated counts for every cell, no mental arithmetic
+library(emmeans)
+emmeans(count_mod_2, ~ Treatment | LH_2, type = "response")
+
+# Treatment contrast within each LH_2 level (as ratios)
+pairs(emmeans(count_mod_2, ~ Treatment | LH_2), type = "response")
+
+levels(count_df_growth$LH_2)
+levels(count_df_growth$Treatment)
+levels(count_df_growth$Year)
+
+
+
+
+### In order to show the actual effects (posteriors) of the predictors, I need to add the 
+### rest of the parameters to b0 
+
+ce_count <- conditional_effects(
+  count_mod_2,
+  effects = "LH_2:Treatment",
+  conditions = data.frame(Year = levels(count_df_growth$Year)),
+  re_formula = NA)
+
+plot(ce_count, points = T, ask = FALSE)
+
+plot(ce_count, plot = FALSE)
+
+
+
+
+
+
+
+
+
+
+
+
+
+############################################################
+###  Count mod 3 = 
+###   Count ~ LH_2 + Treatment + LH_2 * Year + (1 | BARREL)
+############################################################
+count_mod_3 <- readRDS("models/count_mod_3.rds")
+summary(count_mod_3)
+
+
+
+
+
+
+
+
+
+
+
+
+#############################################
+### FITNESS: distribution of the response ###
+#############################################
+hist(count_df_fitness$Fitness, breaks = 40)
+
+ggplot(data = count_df_fitness,
+       mapping = aes(x = Fitness)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 40,
+                 fill = "grey80", colour = "white") +
+  geom_density(fill = "steelblue", colour = "steelblue4",
+               alpha = 0.25, linewidth = 0.8) +
+  labs(x = NULL, y = NULL) +
+  theme_classic()
+## So it looks like maybe a Beta, Gamma, or Binomial distribution might work. 
+
+##### COUNT/available seed models
+
+fit_mod_1 <- readRDS("models/fit_mod_1.rds")
+fit_mod_2 <- readRDS("models/fit_mod_2.rds")
+fit_mod_3 <- readRDS("models/fit_mod_3.rds")
+fit_mod_4 <- readRDS("models/fit_mod_4.rds")
+
+
+####################
+###  Fit mod 1  ####
+####################
+summary(fit_mod_1)
+
+
+
+####################
+###  Fit mod 2  ####
+####################
+summary(fit_mod_2)
+
+
+####################
+###  Fit mod 3  ####
+####################
+summary(fit_mod_3)
+
+
+
+
+
+
+
+####################
+###  Fit mod 4  ####
+####################
+summary(fit_mod_4)
+post_4 <- as_draws_df(fit_mod_4) |>
+  select(starts_with("b_"), sd_BARREL__Intercept, phi, zi) |>
+  pivot_longer(everything(), names_to = "parameter", values_to = "value")
+
+# 1. Identified parameters, one density panel each (SLOW terms excluded, see below)
+post_4 |>
+  filter(!str_detect(parameter, "SLOW")) |>
+  ggplot(aes(value)) +
+  geom_density(fill = "grey70", colour = NA) +
+  geom_vline(data = ~ filter(.x, str_starts(parameter, "b_"), parameter != "b_Intercept"),
+             aes(xintercept = 0), linetype = 2) +   # zero line on effect terms only
+  facet_wrap(~ parameter, scales = "free", ncol = 3) +
+  labs(x = NULL, y = "Posterior density") +
+  theme_classic() +
+  theme(strip.background = element_blank(), strip.text = element_text(face = "bold"))
+
+# 2. Same coefficients overlaid on one axis (logit scale), with 66% / 95% intervals
+fit_mod_4 |>
+  gather_draws(`b_.*`, regex = TRUE) |>
+  filter(!str_detect(.variable, "Intercept|SLOW")) |>
+  ggplot(aes(.value, .variable)) +
+  stat_halfeye(.width = c(0.66, 0.95)) +
+  geom_vline(xintercept = 0, linetype = 2) +
+  labs(x = "Effect on logit(mean fitness)", y = NULL) +
+  theme_classic()
+
+# 3. The problem terms: the two SLOW coefficients vs. their sum
+as_draws_df(fit_mod_4) |>
+  transmute(`SLOW (main)`        = b_LH_2SLOW,
+            `SLOW:Repeated`      = `b_LH_2SLOW:TreatmentRepeated`,
+            `Sum (SLOW, Repeated)` = b_LH_2SLOW + `b_LH_2SLOW:TreatmentRepeated`) |>
+  pivot_longer(everything()) |>
+  ggplot(aes(value, fill = name)) +
+  geom_density(alpha = 0.5, colour = NA) +
+  labs(x = "logit scale", y = "Density", fill = NULL) +
+  theme_classic()
+
+
+
+
+
+
+
+
+
+
+############################################################################
+### I've decided against these models, but here is the code just in case ###
+############################################################################
+
+
+mod_logfit_1 <- readRDS("models/mod_logfit_1.rds")
+mod_logfit_2 <- readRDS("models/mod_logfit_2.rds")
+mod_logfit_3 <- readRDS("models/mod_logfit_3.rds")
+mod_logfit_4 <- readRDS("models/mod_logfit_4.rds")
+
+
+
+#############################################
+### logfit mod 1  ###
+#############################################
+summary(mod_logfit_1)
+
+logfit_1 <- as_tibble(as.data.frame(mod_logfit_1))
+
+log_exp_1 <- logfit_1 |> # exponentiate before plotting to put it back into the original response
+  mutate(across(where(is.numeric), exp)) # (abundance +1 / available seeds +1)
+
+
+
+
+logfit_1 %>% 
+  select(2:4) %>% 
+  pivot_longer(everything(), names_to = "parameter", values_to = "value") %>% 
+  ggplot(aes(x = value, fill = parameter)) +
+  geom_density(alpha = 0.5) + 
+  facet_wrap(~ parameter, scales = "free")
+
+
+lh_cols <- c(FAST_I = "#B33F40", FAST_N = "#F6B505", MEDIUM = "#6F7C12", SLOW = "#AAC7B9")  # BRTE colour is a placeholder
+
+# replace colour = Treatment with colour = LH_2, group = Treatment, linetype = Treatment,
+# add scale_colour_manual(values = lh_cols), and drop the facet or facet by Treatment instead
+
+# 1. Every Year x Treatment x LH_2 combination in the model
+nd <- count_df_fitness |>
+  distinct(LH_2, Treatment, Year)
+
+# 2. Posterior predictions of mean log_fit, ignoring barrel effects,
+#    then back-transform each draw to (count + 1) / (available seeds + 1)
+pred <- nd |>
+  add_epred_draws(mod_logfit_1, re_formula = NA) |>
+  mutate(.epred_exp = exp(.epred))
+
+# 3. Figure: raw data behind model predictions, by year, treatment and LH_2
+ggplot(pred, aes(Year, .epred_exp, colour = Treatment, group = Treatment)) +
+  geom_point(data = count_df_fitness,
+             aes(Year, exp(log_fit), colour = Treatment),
+             position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.5),
+             alpha = 0.2, size = 1, inherit.aes = FALSE) +
+  stat_summary(fun = median, geom = "line",
+               position = position_dodge(width = 0.5)) +
+  stat_pointinterval(.width = c(0.66, 0.95), point_size = 3,
+                     position = position_dodge(width = 0.5)) +
+  scale_y_log10() +
+  facet_wrap(~ LH_2, nrow = 1) +
+  labs(x = NULL,
+       y = "(Count + 1) / (Available seeds + 1)",
+       colour = "Seeding treatment") +
+  theme_classic() +
+  theme(legend.position = "bottom",
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"))
+
+
+
+
+
+
+
+
+
+#############################################
+### logfit mod 2  ###
+#############################################
+summary(mod_logfit_2)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+############################################################################
+### I've decided against these models, but here is the code just in case ###
+############################################################################
+
+
 mod_seed_3 <- readRDS("models/mod_seed_3.rds")
 mod_seed_4 <- readRDS("models/mod_seed_4.rds")
 mod_seed_5 <- readRDS("models/mod_seed_5.rds")
@@ -151,6 +689,147 @@ params_4 %>%
   facet_wrap(~ parameter, scales = "free")
 
 
+
+# Prediction grid
+pred_grid_seed_4 <- expand_grid(
+  LH_2 = levels(count_df_growth$LH_2),
+  Treatment = levels(count_df_growth$Treatment),
+  Year = levels(count_df_growth$Year))
+
+# Ensure factors match the model data
+pred_grid_seed_4 <- pred_grid_seed_4 |>
+  mutate(
+    LH_2 = factor(LH_2, levels = levels(count_df_growth$LH_2)),
+    Treatment = factor(
+      Treatment,
+      levels = levels(count_df_growth$Treatment)
+    ),
+    Year = factor(
+      Year,
+      levels = levels(count_df_growth$Year)))
+
+# Posterior expected seed growth
+pred_draws_seed_4 <- posterior_epred(
+  mod_seed_4,
+  newdata = pred_grid_seed_4,
+  re_formula = NA)
+
+
+summarize_predictions <- function(draws, grid, group_vars) {
+  
+  group_id <- grid |>
+    group_by(across(all_of(group_vars))) |>
+    group_indices()
+  
+  groups <- grid |>
+    group_by(across(all_of(group_vars))) |>
+    group_keys()
+  
+  pred_summary <- map_dfr(
+    seq_len(nrow(groups)),
+    function(i) {
+      
+      group_draws <- rowMeans(
+        draws[, group_id == i, drop = FALSE]
+      )
+      
+      tibble(
+        Estimate = mean(group_draws),
+        Est.Error = sd(group_draws),
+        Q2.5 = quantile(group_draws, 0.025),
+        Q97.5 = quantile(group_draws, 0.975)
+      )
+    }
+  )
+  
+  bind_cols(groups, pred_summary)
+}
+
+
+pred_LH_seed_4 <- summarize_predictions(
+  draws = pred_draws_seed_4,
+  grid = pred_grid_seed_4,
+  group_vars = "LH_2"
+)
+
+ggplot(
+  pred_LH_seed_4,
+  aes(x = LH_2, y = Estimate)
+) +
+  geom_point(size = 3) +
+  geom_errorbar(
+    aes(ymin = Q2.5, ymax = Q97.5),
+    width = 0.15,
+    linewidth = 0.8
+  ) +
+  labs(
+    x = "Life-history strategy",
+    y = "Predicted seed growth (log scale)",
+    title = "Effect of life-history strategy on seed growth"
+  ) +
+  theme_classic(base_size = 14)
+
+
+pred_treatment_seed_4 <- summarize_predictions(
+  draws = pred_draws_seed_4,
+  grid = pred_grid_seed_4,
+  group_vars = c("LH_2", "Treatment"))
+
+ggplot(
+  pred_treatment_seed_4,
+  aes(
+    x = Treatment,
+    y = Estimate,
+    color = LH_2,
+    group = LH_2)) +
+  geom_point(size = 3) +
+  geom_line(linewidth = 0.8) +
+  geom_errorbar(
+    aes(ymin = Q2.5, ymax = Q97.5),
+    width = 0.15,
+    linewidth = 0.8
+  ) +
+  labs(
+    x = "Treatment",
+    y = "Predicted seed growth (log scale)",
+    color = "Life-history strategy",
+    title = "Treatment effects on seed growth"
+  ) +
+  theme_classic(base_size = 14)
+
+
+
+
+pred_interaction_seed <- summarize_predictions(
+  draws = pred_draws_seed_4,
+  grid = pred_grid_seed_4,
+  group_vars = c("LH_2", "Treatment", "Year"))
+
+ggplot(
+  pred_interaction_seed,
+  aes(
+    x = Treatment,
+    y = Estimate,
+    color = LH_2,
+    group = LH_2)) +
+  geom_point(size = 3) +
+  geom_line(linewidth = 0.8) +
+  geom_errorbar(
+    aes(ymin = Q2.5, ymax = Q97.5),
+    width = 0.15,
+    linewidth = 0.8) +
+  facet_wrap(~ Year) +
+  labs(
+    x = "Treatment",
+    y = "Predicted seed growth (log scale)",
+    color = "Life-history strategy") 
+
+
+
+
+
+
+
 ###################################################
 ### MODEL 5: life history x treatment x year    ###
 ###################################################
@@ -245,21 +924,3 @@ p_dens_ratio
 # ggsave("figures/seed_growth_density.png",    p_dens,        width = 9, height = 7, dpi = 300)
 # ggsave("figures/seed_growth_ratio_dens.png", p_dens_ratio,  width = 9, height = 7, dpi = 300)
 
-
-#############################################
-### FITNESS: distribution of the response ###
-#############################################
-hist(count_df_fitness$Fitness, breaks = 40)
-
-ggplot(data = count_df_fitness,
-       mapping = aes(x = Fitness)) +
-  geom_histogram(aes(y = after_stat(density)), bins = 40,
-                 fill = "grey80", colour = "white") +
-  geom_density(fill = "steelblue", colour = "steelblue4",
-               alpha = 0.25, linewidth = 0.8) +
-  labs(x = NULL, y = NULL) +
-  theme_classic()
-## So it looks like maybe a Beta, Gamma, or Binomial distribution might work. 
-
-### fitness model output goes here once fit_mod_2 is chosen:
-# fit_mod_2 <- readRDS("models/fit_mod_2.rds")
