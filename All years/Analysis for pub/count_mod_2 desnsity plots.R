@@ -60,9 +60,9 @@ plot_effects(year, "Ratio of expected count vs 2023")
 # ce <- conditional_effects(count_mod_2, effects = "LH_2")
 # plot(ce, points = TRUE, point_args = list(alpha = 0.15, width = 0.1))[[1]] +
 #   labs(x = "", y = "BRTE abundance")
-
-
-library(tidyverse)
+#############################################
+###  BRTE competitor #####
+#############################################
 
 brte_df <- count_df_growth |>
   filter(SPECIES == "BRTE") |>
@@ -292,6 +292,52 @@ ggplot(pred_brte, aes(Year, .epred, colour = Treatment, shape = Treatment)) +
   theme_classic() +
   theme(legend.position = "bottom",
         legend.title = element_text(face = "bold"))
+
+
+
+
+
+
+##########################################
+###   From the BRTE competitor models ###
+##########################################
+brte_mod_1 <- readRDS("models/brte_mod_1.rds")
+brte_mod_2 <- readRDS("models/brte_mod_2.rds")
+
+
+brte_df <- newdata   # BRTE rows with Partner = LAGL / ELEL / ARTR
+
+levels(brte_df$Partner)                # should be "LAGL" "ELEL" "ARTR"
+levels(brte_mod_1$data$Partner)        # should be identical
+
+colors <- c(LAGL = "#F6B505", ELEL = "#6F7C12", ARTR = "#AAC7B9")
+
+get_pred <- function(mod) {
+  mod$data |>
+    distinct(Partner, Treatment, Year) |>
+    add_epred_draws(mod, re_formula = NA)
+}
+
+plot_brte <- function(pred) {
+  ggplot(pred, aes(Treatment, .epred, colour = Partner, group = Partner)) +
+    geom_point(data = brte_df, aes(Treatment, Count, colour = Partner),
+               position = position_jitterdodge(jitter.width = 0.08, dodge.width = 0.4),
+               alpha = 0.25, size = 1, inherit.aes = FALSE) +
+    stat_summary(fun = median, geom = "line", linewidth = 0.8,
+                 position = position_dodge(width = 0.4)) +
+    stat_pointinterval(.width = c(0.66, 0.95), point_size = 3,
+                       position = position_dodge(width = 0.4)) +
+    scale_colour_manual(values = colors, name = "Native partner") +
+    facet_wrap(~ Year, scales = "free_y") +
+    labs(x = "Seeding treatment", y = "BRTE count") +
+    theme_classic() +
+    theme(legend.position = "bottom",
+          strip.background = element_blank(),
+          strip.text = element_text(face = "bold"))
+}
+
+pred_1 <- get_pred(brte_mod_1); plot_brte(pred_1)
+pred_2 <- get_pred(brte_mod_2); plot_brte(pred_2)
 
 
 

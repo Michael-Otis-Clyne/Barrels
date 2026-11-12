@@ -296,10 +296,41 @@ ggplot(lrr_summary |> filter(LH_2 != "FAST_I"),
         axis.ticks.x = element_blank())
 
 
+lrr_raw <- count_df_growth |>
+  group_by(LH_2, Year, Treatment) |>
+  summarise(mean_count = mean(Count), .groups = "drop") |>
+  pivot_wider(names_from = Treatment, values_from = mean_count) |>
+  mutate(LRR = log((Repeated + 1) / (Single + 1)))
+
+# 
+# ggplot(lrr_raw |> filter(LH_2 != "FAST_I"),
+#        aes(LH_2, LRR, colour = LH_2)) +
+#   geom_hline(yintercept = 0, linetype = 2) +
+#   geom_point(size = 4) +
+#   scale_colour_manual(values = lh_cols, name = "Life history") +
+#   facet_wrap(~ Year, nrow = 1) +
+#   labs(x = NULL, y = "Log response ratio\nlog((Repeated + 1) / (Single + 1))") +
+#   theme_classic() +
+#   theme(legend.position = "bottom",
+#         strip.background = element_blank(),
+#         strip.text = element_text(face = "bold"),
+#         axis.text.x = element_blank(),
+#         axis.ticks.x = element_blank())
 
 
-
-
+ggplot(lrr_raw |> filter(LH_2 != "FAST_I"),
+       aes(LH_2, LRR, fill = LH_2)) +
+  geom_col() +
+  geom_hline(yintercept = 0) +
+  scale_fill_manual(values = lh_cols, name = "Life history") +
+  facet_wrap(~ Year, nrow = 1) +
+  labs(x = NULL, y = "LRR") +
+  theme_classic() +
+  theme(legend.position = "bottom",
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
 
 ###################################################
 ###  plots of posterior distributions
