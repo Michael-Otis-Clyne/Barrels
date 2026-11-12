@@ -559,12 +559,34 @@ count_df_fitness <- count_df_fitness |>
   filter(!is.na(Fitness))
 
 
+#########################################
+###  Prep for BRTE competitor models ###
+#########################################
+# 1. Identify each BRTE barrel's native partner
+brte_barrels <- count_df_growth |> filter(SPECIES == "BRTE") |> distinct(BARREL)
+
+partner_df <- count_df_growth |>
+  semi_join(brte_barrels, by = "BARREL") |>
+  filter(SPECIES != "BRTE") |>
+  distinct(BARREL, Partner = SPECIES)     
+
+BRTE_data <- count_df_growth |>
+  filter(SPECIES == "BRTE") |>
+  left_join(partner_df, by = "BARREL") |>
+  mutate(Partner = factor(Partner, levels = c("LAGL", "ELEL", "ARTR")))
+
+brte_df <- BRTE_data    # BRTE rows with Partner attached (from Step 1)
+brte_df |> count(Partner, Treatment, Year)  
+
+
+
 #######################
 ### Save for models ###
 #######################
 
 saveRDS(count_df_growth,  "data/count_df_growth.rds")
 saveRDS(count_df_fitness, "data/count_df_fitness.rds")
+saveRDS(brte_df,           "data/brte_df.rds")
 saveRDS(Pdata_all,        "data/Pdata_all.rds")
 saveRDS(Cdata_all,        "data/Cdata_all.rds")
 saveRDS(SD_all,           "data/SD_all.rds")

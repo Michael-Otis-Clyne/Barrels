@@ -18,6 +18,9 @@ dir.create("figures", showWarnings = FALSE)
 count_df_growth  <- readRDS("data/count_df_growth.rds")
 count_df_fitness <- readRDS("data/count_df_fitness.rds")
 
+lh_cols <- c(FAST_I = "#B33F40", FAST_N = "#F6B505", MEDIUM = "#6F7C12", SLOW = "#AAC7B9")  # BRTE colour is a placeholder
+
+
 #############################################
 ### ABUNDANCE: distribution of the response ###
 #############################################
@@ -244,12 +247,54 @@ ggplot(pred_int_count_2|> filter(LH_2  !="FAST_I"),
   geom_errorbar(
     aes(ymin = Q2.5, ymax = Q97.5),
     width = 0.15,
-    linewidth = 0.8
-  ) +
+    linewidth = 0.8) +
+  scale_colour_manual(values = lh_cols, name = "Life history") +
   facet_wrap(~ Year) +
   labs(
     y = "Predicted abundance",
-    color = "Life history") 
+    color = "Life history") + theme_classic()
+
+
+#####################################################
+### Log response ratio figure ###
+#####################################################
+
+# lh_cols <- c(FAST_N = "#F6B505", MEDIUM = "#6F7C12", SLOW = "#AAC7B9")
+
+# Log response ratio per posterior draw
+
+lrr_draws <- pred_grid_count_2 |>
+  add_epred_draws(count_mod_2, re_formula = NA) |>
+  ungroup() |>
+  select(LH_2, Treatment, Year, .draw, .epred) |>
+  pivot_wider(names_from = Treatment, values_from = .epred) |>
+  mutate(LRR = log((Repeated + 1) / (Single + 1)))
+
+# Summarize across draws
+lrr_summary <- lrr_draws |>
+  group_by(LH_2, Year) |>
+  summarise(Estimate = median(LRR),
+            Q2.5     = quantile(LRR, 0.025),
+            Q97.5    = quantile(LRR, 0.975),
+            .groups = "drop")
+
+# Figure
+ggplot(lrr_summary |> filter(LH_2 != "FAST_I"),
+       aes(x = LH_2, y = Estimate, colour = LH_2)) +
+  geom_hline(yintercept = 0, linetype = 2) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = Q2.5, ymax = Q97.5), width = 0.15, linewidth = 0.8) +
+ # scale_colour_manual(values = lh_cols, name = "Life history") +
+  facet_wrap(~ Year, nrow = 1) +
+  labs(x = NULL,
+       y = "Log response ratio") +
+  theme_classic() +
+  theme(legend.position = "bottom",
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
 
 
 
@@ -495,12 +540,19 @@ lh_cols <- c(FAST_I = "#B33F40", FAST_N = "#F6B505", MEDIUM = "#6F7C12", SLOW = 
 # replace colour = Treatment with colour = LH_2, group = Treatment, linetype = Treatment,
 # add scale_colour_manual(values = lh_cols), and drop the facet or facet by Treatment instead
 
-# 1. Every Year x Treatment x LH_2 combination in the model
-nd <- count_df_fitness |>
-  distinct(LH_2, Treatment, Year)
 
-# 2. Posterior predictions of mean log_fit, ignoring barrel effects,
-#    then back-transform each draw to (count + 1) / (available seeds + 1)
+
+
+
+
+
+
+
+
+
+
+
+
 pred <- nd |>
   add_epred_draws(mod_logfit_1, re_formula = NA) |>
   mutate(.epred_exp = exp(.epred))

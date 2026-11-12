@@ -24,6 +24,7 @@ n_cores <- parallel::detectCores()
 
 count_df_growth  <- readRDS("data/count_df_growth.rds")
 count_df_fitness <- readRDS("data/count_df_fitness.rds")
+brte_df <- readRDS("data/brte_df.rds")
 
 
 #################################
@@ -297,5 +298,31 @@ mod_logfit_2 <- add_criterion(mod_logfit_2, "loo", file = "models/mod_logfit_2")
 mod_logfit_3 <- add_criterion(mod_logfit_3, "loo", file = "models/mod_logfit_3")
 mod_logfit_4 <- add_criterion(mod_logfit_4, "loo", file = "models/mod_logfit_4")
 loo_compare(mod_logfit_1, mod_logfit_1, mod_logfit_3, mod_logfit_4)
+
+
+
+#################################
+### 4. BRTE competitor MODELS ###
+#################################
+
+brte_mod_1 <- brms::brm(
+  Count ~ Partner * Treatment + Year + (1 | BARREL),
+  data = brte_df,
+  family = negbinomial(),
+  iter = 5000,
+  warmup = 3000,
+  chains = 3, 
+  control = list(max_treedepth = 12),
+  file = "models/brte_mod_1")
+
+brte_mod_2 <- brms::brm(
+  Count ~ Partner * Treatment * Year + (1 | BARREL),
+  data = brte_df,
+  family = negbinomial(),
+  iter = 5000,
+  warmup = 3000,
+  chains = 3, 
+  control = list(max_treedepth = 12),
+  file = "models/brte_mod_2")
 
 
